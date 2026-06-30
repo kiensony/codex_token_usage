@@ -18,6 +18,7 @@ CONFIG_FILENAME = "config.json"
 COLOR_POLICIES = ("auto", "always", "never")
 COLOR_MODES = ("8bit", "rgb")
 PLAIN_THEME_NAMES = ("plain", "disabled", "none")
+DEFAULT_SHUTDOWN_SECONDS = 2.45
 
 RGB = tuple[int, int, int]
 
@@ -228,6 +229,7 @@ class ThemeLoadResult:
     limits: LimitConfig = LimitConfig()
     prediction: PredictionConfig = PredictionConfig()
     auto_refresh_seconds: int | None = None
+    shutdown_seconds: float = DEFAULT_SHUTDOWN_SECONDS
 
 
 @dataclass(frozen=True)
@@ -259,6 +261,7 @@ def load_theme_config(path: Path | None = None) -> ThemeLoadResult:
         limits = parse_limit_config(raw)
         prediction = parse_prediction_config(raw)
         auto_refresh_seconds = parse_auto_refresh_config(raw)
+        shutdown_seconds = parse_shutdown_config(raw)
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         return ThemeLoadResult(
             config=ThemeConfig(),
@@ -281,6 +284,7 @@ def load_theme_config(path: Path | None = None) -> ThemeLoadResult:
         limits=limits,
         prediction=prediction,
         auto_refresh_seconds=auto_refresh_seconds,
+        shutdown_seconds=shutdown_seconds,
     )
 
 
@@ -426,6 +430,19 @@ def parse_auto_refresh_config(raw: object) -> int | None:
     )
 
 
+def parse_shutdown_config(raw: object) -> float:
+    if not isinstance(raw, dict):
+        raise ValueError("config must be a JSON object")
+
+    misc = raw.get("misc", {})
+    if not isinstance(misc, dict):
+        raise ValueError("misc must be a JSON object")
+    return parse_shutdown_seconds(
+        misc.get("shutdown_seconds", DEFAULT_SHUTDOWN_SECONDS),
+        "misc.shutdown_seconds",
+    )
+
+
 def save_theme_config(
     config: ThemeConfig,
     path: Path | None = None,
@@ -435,6 +452,7 @@ def save_theme_config(
     limits: LimitConfig | None = None,
     prediction: PredictionConfig | None = None,
     auto_refresh_seconds: int | None = None,
+    shutdown_seconds: float = DEFAULT_SHUTDOWN_SECONDS,
 ) -> Path:
     config_path = path or default_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -446,6 +464,10 @@ def save_theme_config(
     refresh_seconds = parse_auto_refresh_seconds(
         auto_refresh_seconds,
         "misc.auto_refresh_seconds",
+    )
+    parsed_shutdown_seconds = parse_shutdown_seconds(
+        shutdown_seconds,
+        "misc.shutdown_seconds",
     )
     payload = {
         "version": CONFIG_VERSION,
@@ -487,6 +509,7 @@ def save_theme_config(
         },
         "misc": {
             "auto_refresh_seconds": refresh_seconds,
+            "shutdown_seconds": parsed_shutdown_seconds,
         },
         "keybindings": {
             action: list(labels)
@@ -599,6 +622,27 @@ def parse_auto_refresh_seconds(
         raise ValueError(f"{name} must not be negative")
     if seconds == 0:
         return None
+    return seconds
+
+
+def parse_shutdown_seconds(
+    value: object,
+    name: str = "shutdown seconds",
+) -> float:
+    if isinstance(value, str):
+        value = value.strip()
+        if value == "":
+            return DEFAULT_SHUTDOWN_SECONDS
+    if value is None:
+        return DEFAULT_SHUTDOWN_SECONDS
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a positive number of seconds")
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a positive number of seconds") from exc
+    if seconds <= 0:
+        raise ValueError(f"{name} must be positive")
     return seconds
 
 
@@ -807,6 +851,7 @@ def run_setup_wizard(
     current_limits = result.limits
     current_prediction = result.prediction
     current_auto_refresh_seconds = result.auto_refresh_seconds
+    current_shutdown_seconds = result.shutdown_seconds
 
     def write(line: str = "") -> None:
         output.write(line + "\n")
@@ -887,6 +932,11 @@ def run_setup_wizard(
             input_fn,
             write,
         )
+        next_shutdown_seconds = prompt_shutdown_config(
+            current_shutdown_seconds,
+            input_fn,
+            write,
+        )
 
         answer = input_fn("Save this config? [Y/n]: ").strip().lower()
     except (EOFError, KeyboardInterrupt, ValueError) as exc:
@@ -906,6 +956,7 @@ def run_setup_wizard(
         limits=next_limits,
         prediction=next_prediction,
         auto_refresh_seconds=next_auto_refresh_seconds,
+        shutdown_seconds=next_shutdown_seconds,
     )
     write(f"saved {saved}")
     return 0
@@ -1068,6 +1119,24 @@ def prompt_auto_refresh_config(
             return current
         try:
             return parse_auto_refresh_seconds(raw, "TUI auto refresh seconds")
+        except ValueError as exc:
+            write(str(exc))
+
+
+def prompt_shutdown_config(
+    current: float,
+    input_fn: Callable[[str], str],
+    write: Callable[[str], None],
+) -> float:
+    write("")
+    write("Shutdown:")
+    default_text = f"{current:g}"
+    while True:
+        raw = input_fn(f"Shutdown closing frame seconds [{default_text}]: ").strip()
+        if not raw:
+            return current
+        try:
+            return parse_shutdown_seconds(raw, "Shutdown closing frame seconds")
         except ValueError as exc:
             write(str(exc))
 

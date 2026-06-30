@@ -14,9 +14,10 @@ from codex_token_usage.models import (
     UsageDataset,
 )
 from codex_token_usage.pricing import ModelPrice
-from codex_token_usage.theme import PRESET_NAMES, ThemeConfig, themed_bar_segments
+from codex_token_usage.theme import DisplayConfig, PRESET_NAMES, ThemeConfig, themed_bar_segments
 from codex_token_usage.tui import (
     ABOUT_DESCRIPTION,
+    OFFBOARD_MESSAGE,
     CursesUi,
     TuiOptions,
     TuiState,
@@ -29,9 +30,12 @@ from codex_token_usage.tui import (
     cycle_theme_preset,
     display_setting_label,
     flag_picker_block_height,
+    farewell_flag_height,
+    farewell_frame_delay,
     flag_picker_page_size,
     flag_picker_visible_rows,
     flag_display_name,
+    farewell_content_lines,
     forecast_key_values,
     misc_setting_label,
     prediction_algorithm_label,
@@ -40,12 +44,15 @@ from codex_token_usage.tui import (
     parse_settings_lightness,
     parse_settings_model_width,
     parse_settings_rate,
+    parse_settings_shutdown_seconds,
     pride_community_message,
     pride_message_for_preset,
     pride_messages_for_presets,
     settings_model_names,
     settings_price_source,
     settings_rate_text,
+    settings_snapshot,
+    shutdown_seconds_label,
     theme_current_preset,
     theme_current_preset_label,
     theme_preset_label,
@@ -214,6 +221,39 @@ class TuiStateTests(unittest.TestCase):
         ui.handle_key(27)
         self.assertFalse(ui.state.about_open)
 
+    def test_ctrl_c_quits(self) -> None:
+        ui = CursesUi(
+            FakeStdScr([]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        ui.handle_key(3)
+
+        self.assertTrue(ui.state.should_quit)
+
+    def test_farewell_force_shutdown_keys(self) -> None:
+        ui = CursesUi(
+            FakeStdScr([ord("q")]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        self.assertTrue(ui.wait_for_farewell_frame(2500))
+
+        ui = CursesUi(
+            FakeStdScr([27]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        self.assertTrue(ui.wait_for_farewell_frame(2500))
+
+        ui = CursesUi(
+            FakeStdScr([ord("x"), -1]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        self.assertFalse(ui.wait_for_farewell_frame(2500))
+
     def test_details_back_navigation_and_reload_preserves_selection(self) -> None:
         state = TuiState(dataset=dataset(extra=True), today=date(2026, 6, 29))
         state = state.move_selection(1)
@@ -235,6 +275,9 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(truncate("abcdef", 4), "abc~")
         self.assertEqual(CursesUi.session_model_width(160), 24)
         self.assertEqual(CursesUi.session_model_width(160, configured_width=12), 12)
+        self.assertEqual(farewell_flag_height(20, 4, ((1, 2, 3), (4, 5, 6))), 2)
+        self.assertEqual(farewell_flag_height(8, 4, ((1, 2, 3), (4, 5, 6))), 0)
+        self.assertEqual(farewell_frame_delay(2.5), 2500)
 
     def test_safe_addstr_uses_full_available_width(self) -> None:
         stdscr = FakeStdScr([], size=(4, 5))
@@ -304,6 +347,7 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(auto_refresh_label(None), "off")
         self.assertEqual(auto_refresh_label(1), "1 second")
         self.assertEqual(auto_refresh_label(30), "30 seconds")
+        self.assertEqual(shutdown_seconds_label(2.5), "2.5 seconds")
         self.assertEqual(parse_settings_rate("1.25"), 1.25)
         self.assertEqual(parse_settings_model_width("auto"), None)
         self.assertEqual(parse_settings_model_width("18"), 18)
@@ -313,6 +357,44 @@ class TuiStateTests(unittest.TestCase):
             "whole number",
             parse_settings_auto_refresh_seconds("1.5"),
         )
+        self.assertEqual(parse_settings_shutdown_seconds("2.5"), 2.5)
+        self.assertIn("positive", parse_settings_shutdown_seconds("0"))
+        base_snapshot = settings_snapshot(
+            ThemeConfig(),
+            DisplayConfig(),
+            custom,
+            KeybindingConfig(),
+            PredictionConfig(),
+            None,
+            2.45,
+        )
+        changed_snapshot = settings_snapshot(
+            ThemeConfig(),
+            DisplayConfig(show_model=False),
+            custom,
+            KeybindingConfig(),
+            PredictionConfig(),
+            None,
+            2.45,
+        )
+        self.assertNotEqual(base_snapshot, changed_snapshot)
+
+    def test_confirm_settings_action(self) -> None:
+        ui = CursesUi(
+            FakeStdScr([ord("y")]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        self.assertTrue(ui.confirm_settings_action("Save settings changes? y/N: "))
+
+        ui = CursesUi(
+            FakeStdScr([ord("n")]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        self.assertFalse(ui.confirm_settings_action("Save settings changes? y/N: "))
 
     def test_forecast_key_values(self) -> None:
         forecast = make_usage_forecast(
@@ -341,14 +423,21 @@ class TuiStateTests(unittest.TestCase):
             TuiState(dataset=dataset()),
             TuiOptions(codex_home=Path("/tmp")),
         )
-        prediction, auto_refresh_seconds, status = ui.apply_misc_setting(
+        (
+            prediction,
+            auto_refresh_seconds,
+            shutdown_seconds,
+            status,
+        ) = ui.apply_misc_setting(
             PredictionConfig(),
             None,
+            2.45,
             "prediction_algorithm",
         )
 
         self.assertEqual(prediction.algorithm, "previous_period")
         self.assertIsNone(auto_refresh_seconds)
+        self.assertEqual(shutdown_seconds, 2.45)
         self.assertEqual(status, "prediction algorithm: previous period")
 
     def test_auto_refresh_timeout_calculation(self) -> None:
@@ -386,6 +475,15 @@ class TuiStateTests(unittest.TestCase):
         self.assertIn(ABOUT_DESCRIPTION, joined_about)
         self.assertIn("transgender community", joined_about)
         self.assertTrue(all(len(line) <= 34 for line in about_lines))
+        farewell_lines = farewell_content_lines(
+            ThemeConfig(enabled=True, preset="trans"),
+            34,
+        )
+        joined_farewell = " ".join(farewell_lines)
+        self.assertIn("Bye bye", joined_farewell)
+        self.assertIn("transgender flag", joined_farewell)
+        self.assertIn(OFFBOARD_MESSAGE, joined_farewell)
+        self.assertTrue(all(len(line) <= 34 for line in farewell_lines))
         self.assertEqual(
             pride_message_for_preset("all"),
             "Pride: every community in this app belongs here; be yourself and be proud to be there.",
@@ -505,6 +603,7 @@ class FakeStdScr:
         self.keys = keys
         self.size = size
         self.writes: list[tuple[int, int, str, int]] = []
+        self.timeouts: list[int] = []
 
     def getmaxyx(self) -> tuple[int, int]:
         return self.size
@@ -518,11 +617,17 @@ class FakeStdScr:
     def addstr(self, y: int, x: int, text: str, attr: int = 0) -> None:
         self.writes.append((y, x, text, attr))
 
+    def erase(self) -> None:
+        self.writes.clear()
+
+    def timeout(self, value: int) -> None:
+        self.timeouts.append(value)
+
     def refresh(self) -> None:
         return None
 
     def getch(self) -> int:
-        return self.keys.pop(0)
+        return self.keys.pop(0) if self.keys else -1
 
 
 if __name__ == "__main__":

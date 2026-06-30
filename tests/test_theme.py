@@ -126,10 +126,16 @@ class ThemeConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.json"
 
-            save_theme_config(ThemeConfig(), path, auto_refresh_seconds=30)
+            save_theme_config(
+                ThemeConfig(),
+                path,
+                auto_refresh_seconds=30,
+                shutdown_seconds=4.5,
+            )
             result = load_theme_config(path)
 
         self.assertEqual(result.auto_refresh_seconds, 30)
+        self.assertEqual(result.shutdown_seconds, 4.5)
         self.assertEqual(result.status, "")
 
     def test_invalid_limit_falls_back_with_status(self) -> None:
@@ -209,6 +215,31 @@ class ThemeConfigTests(unittest.TestCase):
 
         self.assertIsNone(result.auto_refresh_seconds)
         self.assertIn("misc.auto_refresh_seconds", result.status)
+
+    def test_invalid_shutdown_time_falls_back_with_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "theme": {
+                            "enabled": False,
+                            "preset": "femboy",
+                            "color_mode": "8bit",
+                            "lightness": 1,
+                        },
+                        "misc": {
+                            "shutdown_seconds": 0,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = load_theme_config(path)
+
+        self.assertIn("misc.shutdown_seconds", result.status)
 
     def test_invalid_json_falls_back_to_plain_with_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

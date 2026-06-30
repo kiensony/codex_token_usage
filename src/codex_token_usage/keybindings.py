@@ -79,7 +79,7 @@ DEFAULT_KEYBINDINGS: dict[str, tuple[str, ...]] = {
     "help": ("?",),
     "back": ("Backspace",),
     "back_or_quit": ("Esc",),
-    "quit": ("q",),
+    "quit": ("q", "Ctrl+C"),
 }
 DEFAULT_KEYBINDING_ITEMS = tuple(
     (action, DEFAULT_KEYBINDINGS[action]) for action in KEYBINDING_ACTIONS

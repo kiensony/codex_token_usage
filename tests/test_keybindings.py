@@ -20,6 +20,7 @@ class KeybindingTests(unittest.TestCase):
 
         self.assertEqual(config.labels("open_about"), ("a",))
         self.assertEqual(config.labels("show_all_time"), ("A",))
+        self.assertEqual(config.labels("quit"), ("q", "Ctrl+C"))
 
     def test_old_all_time_default_migrates_when_about_is_missing(self) -> None:
         config = parse_keybindings_config({"keybindings": {"show_all_time": ["a"]}})

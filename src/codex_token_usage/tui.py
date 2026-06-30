@@ -43,6 +43,7 @@ from .report import ReportRow, format_int, format_percent, make_report_rows
 from .theme import (
     BarSegment,
     COLOR_MODES,
+    DEFAULT_SHUTDOWN_SECONDS,
     DEFAULT_THEME_PRESET,
     DisplayConfig,
     PRESET_NAMES,
@@ -50,6 +51,7 @@ from .theme import (
     ThemeConfig,
     load_theme_config,
     parse_auto_refresh_seconds,
+    parse_shutdown_seconds,
     rgb_to_ansi256,
     rgb_to_basic_color,
     save_theme_config,
@@ -141,7 +143,13 @@ APPEARANCE_SETTING_FIELDS = (
     "accent_line",
     "themed_bars",
 )
-MISC_SETTING_FIELDS = ("prediction_algorithm", "auto_refresh_seconds", "about")
+MISC_SETTING_FIELDS = (
+    "prediction_algorithm",
+    "auto_refresh_seconds",
+    "shutdown_seconds",
+    "about",
+)
+FORCE_SHUTDOWN_KEYS = (27, ord("q"), ord("Q"))
 
 
 @dataclass(frozen=True)
@@ -158,6 +166,7 @@ class TuiOptions:
     limits: LimitConfig = LimitConfig()
     prediction: PredictionConfig = PredictionConfig()
     auto_refresh_seconds: int | None = None
+    shutdown_seconds: float = DEFAULT_SHUTDOWN_SECONDS
 
 
 @dataclass(frozen=True)
@@ -617,14 +626,19 @@ class CursesUi:
         self.stdscr.keypad(True)
         self.init_theme_colors()
         self.schedule_next_auto_refresh()
-        while not self.state.should_quit:
-            self.render()
-            self.configure_input_timeout()
-            key = self.stdscr.getch()
-            if key == -1:
-                self.handle_auto_refresh()
-                continue
-            self.handle_key(key)
+        try:
+            while not self.state.should_quit:
+                self.render()
+                self.configure_input_timeout()
+                key = self.stdscr.getch()
+                if key == -1:
+                    self.handle_auto_refresh()
+                    continue
+                self.handle_key(key)
+        except KeyboardInterrupt:
+            self.state = self.state.quit()
+        finally:
+            self.render_farewell()
 
     def init_theme_colors(self) -> None:
         palette = theme_palette(self.options.theme)
@@ -832,6 +846,7 @@ class CursesUi:
         keybindings = self.options.keybindings
         prediction = self.options.prediction
         auto_refresh_seconds = self.options.auto_refresh_seconds
+        shutdown_seconds = self.options.shutdown_seconds
         model_names = settings_model_names(self.state.dataset, custom_prices)
         tab_index = 0
         model_index = 0
@@ -841,6 +856,15 @@ class CursesUi:
         keybinding_index = 0
         misc_field_index = 0
         status = "settings: press 1-5 for tabs, enter/e to edit selected item"
+        initial_settings = settings_snapshot(
+            theme,
+            display,
+            custom_prices,
+            keybindings,
+            prediction,
+            auto_refresh_seconds,
+            shutdown_seconds,
+        )
 
         while True:
             model_names = settings_model_names(self.state.dataset, custom_prices)
@@ -861,12 +885,30 @@ class CursesUi:
                 keybinding_index,
                 prediction,
                 auto_refresh_seconds,
+                shutdown_seconds,
                 misc_field_index,
                 status,
             )
             key = self.stdscr.getch()
+            settings_changed = (
+                settings_snapshot(
+                    theme,
+                    display,
+                    custom_prices,
+                    keybindings,
+                    prediction,
+                    auto_refresh_seconds,
+                    shutdown_seconds,
+                )
+                != initial_settings
+            )
 
             if key in (ord("q"), 27):
+                if settings_changed and not self.confirm_settings_action(
+                    "Discard settings changes? y/N: "
+                ):
+                    status = "settings discard canceled"
+                    continue
                 self.state = replace(self.state, status="settings canceled")
                 return
             if ord("1") <= key <= ord(str(len(SETTINGS_TABS))):
@@ -874,6 +916,11 @@ class CursesUi:
                 status = f"tab: {SETTINGS_TABS[tab_index]}"
                 continue
             if key == ord("s"):
+                if settings_changed and not self.confirm_settings_action(
+                    "Save settings changes? y/N: "
+                ):
+                    status = "settings save canceled"
+                    continue
                 pricing = PricingConfig(model_prices=tuple(sorted(custom_prices.items())))
                 try:
                     path = save_theme_config(
@@ -884,6 +931,7 @@ class CursesUi:
                         limits=self.options.limits,
                         prediction=prediction,
                         auto_refresh_seconds=auto_refresh_seconds,
+                        shutdown_seconds=shutdown_seconds,
                     )
                 except OSError as exc:
                     status = f"settings save failed: {exc}"
@@ -898,6 +946,7 @@ class CursesUi:
                     limits=loaded.limits,
                     prediction=loaded.prediction,
                     auto_refresh_seconds=loaded.auto_refresh_seconds,
+                    shutdown_seconds=loaded.shutdown_seconds,
                     theme_status=loaded.status,
                 )
                 self.keymap = keymap_for_config(loaded.keybindings)
@@ -1041,9 +1090,15 @@ class CursesUi:
                     )
                     continue
                 if tab_index == 4:
-                    prediction, auto_refresh_seconds, status = self.apply_misc_setting(
+                    (
                         prediction,
                         auto_refresh_seconds,
+                        shutdown_seconds,
+                        status,
+                    ) = self.apply_misc_setting(
+                        prediction,
+                        auto_refresh_seconds,
+                        shutdown_seconds,
                         MISC_SETTING_FIELDS[misc_field_index],
                     )
                     continue
@@ -1079,6 +1134,7 @@ class CursesUi:
         keybinding_index: int,
         prediction: PredictionConfig,
         auto_refresh_seconds: int | None,
+        shutdown_seconds: float,
         misc_field_index: int,
         status: str,
     ) -> None:
@@ -1105,6 +1161,7 @@ class CursesUi:
                 width,
                 prediction,
                 auto_refresh_seconds,
+                shutdown_seconds,
                 misc_field_index,
             )
         else:
@@ -1127,7 +1184,7 @@ class CursesUi:
         )
         footer = (
             "1-5 tabs  h/j/k/l select  enter/e edit  model: a add x reset  keys: a add x reset  "
-            "s save  q cancel"
+            "s save  q cancel  changed asks confirm"
         )
         self.render_themed_text(
             height - 1,
@@ -1264,6 +1321,7 @@ class CursesUi:
         width: int,
         prediction: PredictionConfig,
         auto_refresh_seconds: int | None,
+        shutdown_seconds: float,
         selected_field: int,
     ) -> None:
         rows = [
@@ -1276,6 +1334,11 @@ class CursesUi:
                 "auto_refresh_seconds",
                 "Auto refresh",
                 auto_refresh_label(auto_refresh_seconds),
+            ),
+            (
+                "shutdown_seconds",
+                "Shutdown time",
+                shutdown_seconds_label(shutdown_seconds),
             ),
             (
                 "about",
@@ -1295,7 +1358,7 @@ class CursesUi:
         self.safe_addstr(
             top + 2 + len(rows) + 1,
             0,
-            "Enter cycles prediction algorithms or edits auto refresh seconds.",
+            "Enter cycles prediction algorithms, edits timings, or shows About.",
             curses.A_DIM,
         )
 
@@ -1495,13 +1558,15 @@ class CursesUi:
         self,
         prediction: PredictionConfig,
         auto_refresh_seconds: int | None,
+        shutdown_seconds: float,
         field: str,
-    ) -> tuple[PredictionConfig, int | None, str]:
+    ) -> tuple[PredictionConfig, int | None, float, str]:
         if field == "prediction_algorithm":
             next_prediction = cycle_prediction_algorithm(prediction)
             return (
                 next_prediction,
                 auto_refresh_seconds,
+                shutdown_seconds,
                 f"prediction algorithm: {prediction_algorithm_label(next_prediction.algorithm)}",
             )
         if field == "auto_refresh_seconds":
@@ -1510,19 +1575,51 @@ class CursesUi:
                 auto_refresh_input_value(auto_refresh_seconds),
             )
             if refresh_value is None:
-                return prediction, auto_refresh_seconds, "auto refresh unchanged"
+                return (
+                    prediction,
+                    auto_refresh_seconds,
+                    shutdown_seconds,
+                    "auto refresh unchanged",
+                )
             parsed_refresh = parse_settings_auto_refresh_seconds(refresh_value)
             if isinstance(parsed_refresh, str):
-                return prediction, auto_refresh_seconds, parsed_refresh
+                return prediction, auto_refresh_seconds, shutdown_seconds, parsed_refresh
             return (
                 prediction,
                 parsed_refresh,
+                shutdown_seconds,
                 f"auto refresh: {auto_refresh_label(parsed_refresh)}",
+            )
+        if field == "shutdown_seconds":
+            shutdown_value = self.prompt_input(
+                "shutdown closing frame seconds: ",
+                shutdown_seconds_input_value(shutdown_seconds),
+            )
+            if shutdown_value is None:
+                return (
+                    prediction,
+                    auto_refresh_seconds,
+                    shutdown_seconds,
+                    "shutdown time unchanged",
+                )
+            parsed_shutdown = parse_settings_shutdown_seconds(shutdown_value)
+            if isinstance(parsed_shutdown, str):
+                return (
+                    prediction,
+                    auto_refresh_seconds,
+                    shutdown_seconds,
+                    parsed_shutdown,
+                )
+            return (
+                prediction,
+                auto_refresh_seconds,
+                parsed_shutdown,
+                f"shutdown time: {shutdown_seconds_label(parsed_shutdown)}",
             )
         if field == "about":
             self.show_about_dialog()
-            return prediction, auto_refresh_seconds, "about shown"
-        return prediction, auto_refresh_seconds, "unknown misc setting"
+            return prediction, auto_refresh_seconds, shutdown_seconds, "about shown"
+        return prediction, auto_refresh_seconds, shutdown_seconds, "unknown misc setting"
 
     def apply_keybinding_setting(
         self,
@@ -1730,6 +1827,14 @@ class CursesUi:
                     position += 1
         finally:
             curses.curs_set(0)
+
+    def confirm_settings_action(self, prompt: str) -> bool:
+        height, width = self.stdscr.getmaxyx()
+        self.stdscr.move(height - 1, 0)
+        self.stdscr.clrtoeol()
+        self.safe_addstr(height - 1, 0, prompt[: max(0, width - 1)], curses.A_REVERSE)
+        self.stdscr.refresh()
+        return self.stdscr.getch() in (ord("y"), ord("Y"))
 
     def prompt_full_model_price(
         self,
@@ -2298,6 +2403,81 @@ class CursesUi:
             start_index=len(lines),
         )
 
+    def render_farewell(self) -> None:
+        if self.stdscr is None:
+            return
+        try:
+            self.set_blocking_input()
+            self.stdscr.erase()
+            height, width = self.stdscr.getmaxyx()
+            left = max(0, (width - 78) // 2)
+            box_width = min(width - left - 1, 78)
+            if box_width <= 10:
+                return
+            cell_width = box_width - 4
+            lines = farewell_content_lines(self.options.theme, cell_width)
+            palette = theme_palette(
+                replace(
+                    self.options.theme,
+                    enabled=True,
+                    preset=theme_current_preset(self.options.theme),
+                )
+            )
+            flag_height = farewell_flag_height(height, len(lines), palette)
+            top = max(1, (height - len(lines) - flag_height - 5) // 2)
+            border = "+" + "-" * (box_width - 2) + "+"
+            self.render_themed_text(top, left, border, curses.A_REVERSE)
+            for index, line in enumerate(lines, start=1):
+                text = f"| {line:<{cell_width}} |"
+                attr = curses.A_BOLD if index == 1 else curses.A_REVERSE
+                self.safe_addstr(top + index, left, text[:box_width], attr)
+            flag_y = top + len(lines) + 1
+            if flag_height:
+                self.render_palette_block(flag_y, left + 2, cell_width, flag_height, palette)
+            closing_y = flag_y + flag_height
+            frame_ms = farewell_frame_delay(self.options.shutdown_seconds)
+            for closing in ("Closing .", "Closing ..", "Closing ..."):
+                text = f"| {closing:<{cell_width}} |"
+                self.safe_addstr(closing_y, left, text[:box_width], curses.A_REVERSE)
+                self.stdscr.refresh()
+                if self.wait_for_farewell_frame(frame_ms):
+                    return
+            self.render_themed_text(
+                closing_y + 1,
+                left,
+                border,
+                curses.A_REVERSE,
+                start_index=len(lines),
+            )
+            self.stdscr.refresh()
+        except curses.error:
+            return
+
+    def wait_for_farewell_frame(self, frame_ms: int) -> bool:
+        if self.stdscr is None:
+            curses.napms(frame_ms)
+            return False
+        if not hasattr(self.stdscr, "timeout"):
+            curses.napms(frame_ms)
+            return False
+
+        deadline = time.monotonic() + (frame_ms / 1000)
+        try:
+            while True:
+                remaining_ms = round((deadline - time.monotonic()) * 1000)
+                if remaining_ms <= 0:
+                    return False
+                self.stdscr.timeout(remaining_ms)
+                key = self.stdscr.getch()
+                if key in FORCE_SHUTDOWN_KEYS:
+                    return True
+                if key == -1:
+                    return False
+        except KeyboardInterrupt:
+            return True
+        finally:
+            self.stdscr.timeout(-1)
+
     def keys_for_action(self, action: str) -> str:
         return format_keybinding_config(self.options.keybindings, action)
 
@@ -2455,6 +2635,26 @@ def usage_bar(value: int, max_value: int, width: int) -> str:
     return "#" * filled + "." * (width - filled)
 
 
+def settings_snapshot(
+    theme: ThemeConfig,
+    display: DisplayConfig,
+    custom_prices: dict[str, ModelPrice],
+    keybindings: KeybindingConfig,
+    prediction: PredictionConfig,
+    auto_refresh_seconds: int | None,
+    shutdown_seconds: float,
+) -> tuple[object, ...]:
+    return (
+        theme,
+        display,
+        tuple(sorted(custom_prices.items())),
+        keybindings,
+        prediction,
+        auto_refresh_seconds,
+        shutdown_seconds,
+    )
+
+
 def settings_model_names(
     dataset: UsageDataset,
     custom_prices: dict[str, ModelPrice],
@@ -2560,9 +2760,26 @@ def auto_refresh_input_value(seconds: int | None) -> str:
     return "0" if seconds is None else str(seconds)
 
 
+def shutdown_seconds_label(seconds: float) -> str:
+    value = f"{seconds:g}"
+    unit = "second" if seconds == 1 else "seconds"
+    return f"{value} {unit}"
+
+
+def shutdown_seconds_input_value(seconds: float) -> str:
+    return f"{seconds:g}"
+
+
 def parse_settings_auto_refresh_seconds(value: str) -> int | None | str:
     try:
         return parse_auto_refresh_seconds(value, "auto refresh")
+    except ValueError as exc:
+        return str(exc)
+
+
+def parse_settings_shutdown_seconds(value: str) -> float | str:
+    try:
+        return parse_shutdown_seconds(value, "shutdown time")
     except ValueError as exc:
         return str(exc)
 
@@ -2631,6 +2848,10 @@ ABOUT_DESCRIPTION = (
     "pricing estimates, sessions, models, and project folders from your local "
     "Codex data."
 )
+OFFBOARD_MESSAGE = (
+    "Thank you for using Codex Token Usage. Keep building with care, and keep "
+    "being yourself."
+)
 
 
 def about_content_lines(theme: ThemeConfig, width: int) -> tuple[str, ...]:
@@ -2648,6 +2869,30 @@ def wrap_text(text: str, width: int) -> list[str]:
     if width <= 0:
         return [""]
     return wrap(text, width=width) or [""]
+
+
+def farewell_content_lines(theme: ThemeConfig, width: int) -> tuple[str, ...]:
+    community = flag_display_name(theme_current_preset(theme))
+    content = ["Bye bye", f"From the {community} flag."]
+    content.extend(wrap_text(OFFBOARD_MESSAGE, width))
+    return tuple(content)
+
+
+def farewell_flag_height(
+    terminal_height: int,
+    line_count: int,
+    palette: tuple[RGB, ...],
+) -> int:
+    if not palette:
+        return 0
+    available = terminal_height - line_count - 5
+    if available <= 0:
+        return 0
+    return min(len(palette), max(1, available))
+
+
+def farewell_frame_delay(shutdown_seconds: float) -> int:
+    return max(1, round(shutdown_seconds * 1000))
 
 
 def pride_message_for_preset(preset: str) -> str:

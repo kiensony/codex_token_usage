@@ -44,7 +44,7 @@ Project/folder usage groups sessions by their exact recorded working directory (
 
 Display settings can show or hide cached tokens, cached %, estimated API cost, reasoning level, cache miss, reasoning tokens, model, and cwd/title columns, and set the session table model column width to `auto` or a fixed 8-40 character width. Appearance settings can change the flag palette with a paged flag picker, color mode, lightness, accent line, and themed usage bars. Estimated cost uses standard OpenAI per-1M-token rates for known models, with any custom rates from setup overriding the built-in table. Unknown models show `n/a`; mixed aggregates with some unknown model rates are marked with `*`.
 
-The overview shows projected usage for the next 5 hours, next day, next week, and next 30-day month. The prediction algorithm is configurable from the Misc settings tab: `recent_rate` projects from the current active usage rate, while `previous_period` assumes the next period will match the previous period's usage. The Misc tab can also set an automatic TUI refresh interval in seconds; `0` or `off` disables it.
+The overview shows projected usage for the next 5 hours, next day, next week, and next 30-day month. The prediction algorithm is configurable from the Misc settings tab: `recent_rate` projects from the current active usage rate, while `previous_period` assumes the next period will match the previous period's usage. The Misc tab can also set an automatic TUI refresh interval in seconds and customize the shutdown closing-frame interval; `0` or `off` disables auto refresh.
 
 Forecast warnings are disabled until a positive token limit is configured. The 5-hour forecast uses sessions active in the rolling last 5 hours and projects that recent rate across a 5-hour horizon. The weekly forecast uses the current ISO week-to-date rate and projects it through the end of the week. Table and graph reports append compact forecast and prediction sections, JSON reports include a top-level `forecast` object, and weekly CSV rows include forecast columns when limits are enabled.
 
@@ -60,7 +60,8 @@ Example config snippet:
     "algorithm": "recent_rate"
   },
   "misc": {
-    "auto_refresh_seconds": 30
+    "auto_refresh_seconds": 30,
+    "shutdown_seconds": 2.45
   }
 }
 ```
@@ -85,7 +86,8 @@ Default TUI keys:
 - `a`: show about this software
 - `?`: show help
 - `Backspace` / `Esc`: return from session details
-- `q`: quit
+- `q` / `Ctrl+C`: quit with a farewell message
+- During farewell, `q` / `Esc`: exit immediately
 
 TUI settings keys:
 
@@ -96,10 +98,10 @@ TUI settings keys:
 - Display Columns tab: toggles token/detail columns or edits model width
 - Appearance tab: opens a flag picker, cycles color mode, edits lightness, and toggles accent line or themed bars
 - Keybindings tab: select an action, `Enter` captures a replacement key, `a` captures an additional key, and `x` resets the selected action to its default
-- Misc tab: `Enter` cycles the prediction algorithm, edits auto refresh seconds, or shows About
+- Misc tab: `Enter` cycles the prediction algorithm, edits auto refresh or shutdown seconds, or shows About
 - Flag picker: `h` / `j` / `k` / `l` moves between flags, `n` / `p` changes page, `Enter` chooses
-- `s`: save settings
-- `q` / `Esc`: cancel settings changes
+- `s`: save settings, confirming first when settings changed
+- `q` / `Esc`: cancel settings, confirming discard when settings changed
 
 ## Development
 
