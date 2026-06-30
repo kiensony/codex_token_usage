@@ -5,6 +5,7 @@ import unittest
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from codex_token_usage.keybindings import KeybindingConfig, update_keybinding
 from codex_token_usage.models import (
     SessionMetadata,
     SessionUsage,
@@ -15,6 +16,7 @@ from codex_token_usage.pricing import ModelPrice
 from codex_token_usage.theme import ThemeConfig, themed_bar_segments
 from codex_token_usage.tui import (
     CursesUi,
+    TuiOptions,
     TuiState,
     appearance_preview_block_height,
     appearance_setting_label,
@@ -197,6 +199,27 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(truncate("abcdef", 4), "abc~")
         self.assertEqual(CursesUi.session_model_width(160), 24)
         self.assertEqual(CursesUi.session_model_width(160, configured_width=12), 12)
+
+    def test_curses_ui_uses_default_and_custom_keybindings(self) -> None:
+        state = TuiState(dataset=dataset())
+        ui = CursesUi(None, state, TuiOptions(codex_home=Path("/tmp")))
+
+        ui.handle_key(ord("j"))
+        self.assertEqual(ui.state.selected_session().session_id, "alpha")
+
+        keybindings = update_keybinding(
+            KeybindingConfig(),
+            "next_view",
+            ("n",),
+        )
+        ui = CursesUi(
+            None,
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp"), keybindings=keybindings),
+        )
+
+        ui.handle_key(ord("n"))
+        self.assertEqual(ui.state.view, "daily")
 
     def test_settings_helpers(self) -> None:
         custom = {"custom-model": ModelPrice(1.0, 0.1, 2.0)}

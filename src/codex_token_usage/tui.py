@@ -6,6 +6,17 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Callable
 
+from .keybindings import (
+    KEYBINDING_ACTION_LABELS,
+    KEYBINDING_ACTIONS,
+    KeybindingConfig,
+    format_keybinding_config,
+    format_keybinding_labels,
+    keymap_for_config,
+    parse_keybinding_text,
+    reset_keybinding,
+    update_keybinding,
+)
 from .loader import load_usage
 from .models import SessionUsage, TokenBreakdown, UsageDataset
 from .pricing import (
@@ -75,7 +86,7 @@ FLAG_PICKER_COLUMNS = 4
 FLAG_PICKER_TOP = 5
 FLAG_PICKER_PREVIEW_HEIGHT = 5
 APPEARANCE_PREVIEW_BLOCK_HEIGHT = 5
-SETTINGS_TABS = ("Model Pricing", "Display Columns", "Appearance")
+SETTINGS_TABS = ("Model Pricing", "Display Columns", "Appearance", "Keybindings")
 DISPLAY_SETTING_FIELDS = (
     "cached_tokens",
     "cached_percent",
@@ -105,6 +116,7 @@ class TuiOptions:
     theme: ThemeConfig = ThemeConfig()
     display: DisplayConfig = DisplayConfig()
     pricing: PricingConfig = PricingConfig()
+    keybindings: KeybindingConfig = KeybindingConfig()
     theme_status: str = ""
 
 
@@ -476,6 +488,7 @@ class CursesUi:
         self.stdscr = stdscr
         self.state = state
         self.options = options
+        self.keymap = keymap_for_config(options.keybindings)
         self.theme_pairs: list[int] = []
         self.preview_pairs: dict[RGB, int] = {}
         self.accent_attr = curses.A_BOLD
@@ -561,57 +574,60 @@ class CursesUi:
         return base_attr | curses.color_pair(self.preview_pairs[rgb])
 
     def handle_key(self, key: int) -> None:
+        action = self.keymap.get(key)
         if self.state.help_open:
-            if key in (ord("?"), ord("q"), 27):
+            if action in ("help", "quit", "back_or_quit") or key == 27:
                 self.state = self.state.close_help()
             return
 
-        if key in (ord("q"), 27):
-            if self.state.view == "details" and key == 27:
+        if action == "quit":
+            self.state = self.state.quit()
+        elif action == "back_or_quit":
+            if self.state.view == "details":
                 self.state = self.state.close_details()
             else:
                 self.state = self.state.quit()
-        elif key in (9,):
+        elif action == "next_view":
             self.state = self.state.next_view()
-        elif key == curses.KEY_BTAB:
+        elif action == "previous_view":
             self.state = self.state.previous_view()
-        elif key in (curses.KEY_DOWN, ord("j")):
+        elif action == "move_down":
             self.state = self.state.move_selection(1)
-        elif key in (curses.KEY_UP, ord("k")):
+        elif action == "move_up":
             self.state = self.state.move_selection(-1)
-        elif key == curses.KEY_NPAGE:
+        elif action == "page_down":
             self.state = self.state.page_selection(1)
-        elif key == curses.KEY_PPAGE:
+        elif action == "page_up":
             self.state = self.state.page_selection(-1)
-        elif key == curses.KEY_HOME:
+        elif action == "select_first":
             self.state = self.state.select_first()
-        elif key == curses.KEY_END:
+        elif action == "select_last":
             self.state = self.state.select_last()
-        elif key in (10, 13, curses.KEY_ENTER):
+        elif action == "open_details":
             self.state = self.state.open_details()
-        elif key == ord("s"):
+        elif action == "cycle_sort":
             self.state = self.state.cycle_sort()
-        elif key == ord("S"):
+        elif action == "toggle_sort_direction":
             self.state = self.state.toggle_sort_direction()
-        elif key == ord("d"):
+        elif action == "cycle_date_preset":
             self.state = self.state.cycle_date_preset()
             if self.state.date_preset == "all":
                 self.reload_all_time()
-        elif key == ord("a"):
+        elif action == "show_all_time":
             self.show_all_time()
-        elif key == ord("["):
+        elif action == "shift_date_backward":
             self.state = self.state.shift_date_window(-1)
-        elif key == ord("]"):
+        elif action == "shift_date_forward":
             self.state = self.state.shift_date_window(1)
-        elif key == ord("r"):
+        elif action == "reload":
             self.state = self.state.reload(self.reload_dataset)
-        elif key == ord("c"):
+        elif action == "open_settings":
             self.open_settings()
-        elif key == ord("/"):
+        elif action == "filter":
             self.prompt_filter()
-        elif key in (curses.KEY_BACKSPACE, 127, 8):
+        elif action == "back":
             self.state = self.state.close_details()
-        elif key == ord("?"):
+        elif action == "help":
             self.state = self.state.open_help()
 
     def reload_dataset(self, since: date | None, until: date | None) -> UsageDataset:
@@ -634,13 +650,15 @@ class CursesUi:
         theme = self.options.theme
         display = self.options.display
         custom_prices = dict(self.options.pricing.model_prices)
+        keybindings = self.options.keybindings
         model_names = settings_model_names(self.state.dataset, custom_prices)
         tab_index = 0
         model_index = 0
         rate_field_index = 0
         display_field_index = 0
         appearance_field_index = 0
-        status = "settings: press 1-3 for tabs, enter/e to edit selected item"
+        keybinding_index = 0
+        status = "settings: press 1-4 for tabs, enter/e to edit selected item"
 
         while True:
             model_names = settings_model_names(self.state.dataset, custom_prices)
@@ -657,6 +675,8 @@ class CursesUi:
                 rate_field_index,
                 display_field_index,
                 appearance_field_index,
+                keybindings,
+                keybinding_index,
                 status,
             )
             key = self.stdscr.getch()
@@ -664,7 +684,7 @@ class CursesUi:
             if key in (ord("q"), 27):
                 self.state = replace(self.state, status="settings canceled")
                 return
-            if key in (ord("1"), ord("2"), ord("3")):
+            if ord("1") <= key <= ord(str(len(SETTINGS_TABS))):
                 tab_index = int(chr(key)) - 1
                 status = f"tab: {SETTINGS_TABS[tab_index]}"
                 continue
@@ -675,6 +695,7 @@ class CursesUi:
                         theme,
                         display=display,
                         pricing=pricing,
+                        keybindings=keybindings,
                     )
                 except OSError as exc:
                     status = f"settings save failed: {exc}"
@@ -685,8 +706,10 @@ class CursesUi:
                     theme=loaded.config,
                     display=loaded.display,
                     pricing=loaded.pricing,
+                    keybindings=loaded.keybindings,
                     theme_status=loaded.status,
                 )
+                self.keymap = keymap_for_config(loaded.keybindings)
                 self.theme_pairs = []
                 self.accent_attr = curses.A_BOLD
                 self.init_theme_colors()
@@ -703,9 +726,12 @@ class CursesUi:
                 elif tab_index == 1:
                     display_field_index = (display_field_index - 1) % len(DISPLAY_SETTING_FIELDS)
                     status = f"display: {display_setting_label(DISPLAY_SETTING_FIELDS[display_field_index])}"
-                else:
+                elif tab_index == 2:
                     appearance_field_index = (appearance_field_index - 1) % len(APPEARANCE_SETTING_FIELDS)
                     status = f"appearance: {appearance_setting_label(APPEARANCE_SETTING_FIELDS[appearance_field_index])}"
+                else:
+                    keybinding_index = (keybinding_index - 1) % len(KEYBINDING_ACTIONS)
+                    status = f"keybinding: {keybinding_action_label(KEYBINDING_ACTIONS[keybinding_index])}"
                 continue
             if key in (ord("l"), curses.KEY_RIGHT):
                 if tab_index == 0:
@@ -714,9 +740,12 @@ class CursesUi:
                 elif tab_index == 1:
                     display_field_index = (display_field_index + 1) % len(DISPLAY_SETTING_FIELDS)
                     status = f"display: {display_setting_label(DISPLAY_SETTING_FIELDS[display_field_index])}"
-                else:
+                elif tab_index == 2:
                     appearance_field_index = (appearance_field_index + 1) % len(APPEARANCE_SETTING_FIELDS)
                     status = f"appearance: {appearance_setting_label(APPEARANCE_SETTING_FIELDS[appearance_field_index])}"
+                else:
+                    keybinding_index = (keybinding_index + 1) % len(KEYBINDING_ACTIONS)
+                    status = f"keybinding: {keybinding_action_label(KEYBINDING_ACTIONS[keybinding_index])}"
                 continue
             if key in (ord("j"), ord("n"), curses.KEY_DOWN):
                 if tab_index == 0:
@@ -725,9 +754,12 @@ class CursesUi:
                 elif tab_index == 1:
                     display_field_index = (display_field_index + 1) % len(DISPLAY_SETTING_FIELDS)
                     status = f"display: {display_setting_label(DISPLAY_SETTING_FIELDS[display_field_index])}"
-                else:
+                elif tab_index == 2:
                     appearance_field_index = (appearance_field_index + 1) % len(APPEARANCE_SETTING_FIELDS)
                     status = f"appearance: {appearance_setting_label(APPEARANCE_SETTING_FIELDS[appearance_field_index])}"
+                else:
+                    keybinding_index = min(keybinding_index + 1, len(KEYBINDING_ACTIONS) - 1)
+                    status = f"keybinding: {keybinding_action_label(KEYBINDING_ACTIONS[keybinding_index])}"
                 continue
             if key in (ord("k"), ord("p"), curses.KEY_UP):
                 if tab_index == 0:
@@ -736,9 +768,12 @@ class CursesUi:
                 elif tab_index == 1:
                     display_field_index = (display_field_index - 1) % len(DISPLAY_SETTING_FIELDS)
                     status = f"display: {display_setting_label(DISPLAY_SETTING_FIELDS[display_field_index])}"
-                else:
+                elif tab_index == 2:
                     appearance_field_index = (appearance_field_index - 1) % len(APPEARANCE_SETTING_FIELDS)
                     status = f"appearance: {appearance_setting_label(APPEARANCE_SETTING_FIELDS[appearance_field_index])}"
+                else:
+                    keybinding_index = max(keybinding_index - 1, 0)
+                    status = f"keybinding: {keybinding_action_label(KEYBINDING_ACTIONS[keybinding_index])}"
                 continue
             if key in (ord("a"),):
                 if tab_index != 0:
@@ -758,8 +793,13 @@ class CursesUi:
                 status = f"custom rate saved for {model}"
                 continue
             if key in (ord("x"),):
+                if tab_index == 3:
+                    action = KEYBINDING_ACTIONS[keybinding_index]
+                    keybindings = reset_keybinding(keybindings, action)
+                    status = f"{keybinding_action_label(action)} reset to default"
+                    continue
                 if tab_index != 0:
-                    status = "reset is only available on Model Pricing"
+                    status = "reset is only available on Model Pricing or Keybindings"
                     continue
                 model = model_names[model_index]
                 if model in custom_prices:
@@ -779,6 +819,13 @@ class CursesUi:
                     theme, status = self.apply_appearance_setting(
                         theme,
                         APPEARANCE_SETTING_FIELDS[appearance_field_index],
+                    )
+                    continue
+                if tab_index == 3:
+                    action = KEYBINDING_ACTIONS[keybinding_index]
+                    keybindings, status = self.apply_keybinding_setting(
+                        keybindings,
+                        action,
                     )
                     continue
                 model = model_names[model_index]
@@ -809,6 +856,8 @@ class CursesUi:
         rate_field_index: int,
         display_field_index: int,
         appearance_field_index: int,
+        keybindings: KeybindingConfig,
+        keybinding_index: int,
         status: str,
     ) -> None:
         self.stdscr.erase()
@@ -820,6 +869,14 @@ class CursesUi:
             self.render_display_settings(content_top, width, display, display_field_index)
         elif tab_index == 2:
             self.render_appearance_settings(content_top, height, width, theme, appearance_field_index)
+        elif tab_index == 3:
+            self.render_keybinding_settings(
+                content_top,
+                height,
+                width,
+                keybindings,
+                keybinding_index,
+            )
         else:
             self.render_model_pricing_settings(
                 content_top,
@@ -839,7 +896,7 @@ class CursesUi:
             start_index=1,
         )
         footer = (
-            "1-3 tabs  h/j/k/l select  enter/e edit  model tab: a add x reset  "
+            "1-4 tabs  h/j/k/l select  enter/e edit  model: a add x reset  keys: x reset  "
             "s save  q cancel"
         )
         self.render_themed_text(
@@ -934,6 +991,42 @@ class CursesUi:
         preview_y = preview_top + 2
         block_height = appearance_preview_block_height(height, preview_y)
         self.render_theme_preview(preview_y, width, theme, block_height)
+
+    def render_keybinding_settings(
+        self,
+        top: int,
+        height: int,
+        width: int,
+        keybindings: KeybindingConfig,
+        selected_action: int,
+    ) -> None:
+        self.safe_addstr(top, 0, "Keybindings", self.accent_attr)
+        self.safe_addstr(
+            top + 1,
+            0,
+            "Enter edits comma-separated keys. x resets the selected action.",
+            curses.A_DIM,
+        )
+        header_y = top + 3
+        action_width = min(34, max(18, width // 3))
+        self.safe_addstr(header_y, 0, "  " + f"{'action':<{action_width}} keys", curses.A_BOLD)
+        row_count = max(0, height - header_y - 3)
+        start_index = visible_start(selected_action, row_count, len(KEYBINDING_ACTIONS))
+        visible = KEYBINDING_ACTIONS[start_index : start_index + row_count]
+        for offset, action in enumerate(visible):
+            row_index = start_index + offset
+            selected = row_index == selected_action
+            marker = ">" if selected else " "
+            attr = curses.A_REVERSE if selected else 0
+            y = header_y + 1 + offset
+            label = truncate(keybinding_action_label(action), action_width)
+            keys = format_keybinding_config(keybindings, action)
+            self.safe_addstr(
+                y,
+                0,
+                f"{marker} {label:<{action_width}} {keys}",
+                attr,
+            )
 
     def render_theme_preview(
         self,
@@ -1126,6 +1219,28 @@ class CursesUi:
             return theme, parsed_lightness
         next_theme = replace(theme, lightness=parsed_lightness)
         return next_theme, f"theme lightness: {format_settings_rate(parsed_lightness)}"
+
+    def apply_keybinding_setting(
+        self,
+        keybindings: KeybindingConfig,
+        action: str,
+    ) -> tuple[KeybindingConfig, str]:
+        current = format_keybinding_config(keybindings, action)
+        value = self.prompt_input(
+            f"{keybinding_action_label(action)} keys: ",
+            current,
+        )
+        if value is None:
+            return keybindings, "keybinding unchanged"
+        try:
+            labels = parse_keybinding_text(value, action)
+            next_keybindings = update_keybinding(keybindings, action, labels)
+        except ValueError as exc:
+            return keybindings, str(exc)
+        return (
+            next_keybindings,
+            f"{keybinding_action_label(action)}: {format_keybinding_labels(labels)}",
+        )
 
     def choose_flag_preset(self, theme: ThemeConfig) -> ThemeConfig | None:
         current = theme_current_preset(theme)
@@ -1737,26 +1852,32 @@ class CursesUi:
     def render_help(self, height: int, width: int) -> None:
         lines = [
             "Help",
-            "Tab / Shift+Tab  switch views",
-            "Arrow keys or j/k  move selection",
-            "PageUp/PageDown  move by page",
-            "Home/End  jump to top or bottom",
-            "Enter  open selected session details",
-            "Backspace/Esc  return from details",
-            "s  cycle sort field",
-            "S  reverse sort direction",
-            "/  filter sessions; Esc clears/cancels filter input",
-            "d  cycle date range preset",
-            "a  show all time",
-            "[ / ]  move active date window backward/forward",
-            "r  reload local Codex data",
-            "c  open settings",
-            "?  open or close help",
-            "q  quit",
+            f"{self.keys_for_action('next_view')} / {self.keys_for_action('previous_view')}  switch views",
+            f"{self.keys_for_action('move_down')} / {self.keys_for_action('move_up')}  move selection",
+            f"{self.keys_for_action('page_down')} / {self.keys_for_action('page_up')}  move by page",
+            f"{self.keys_for_action('select_first')} / {self.keys_for_action('select_last')}  jump to top or bottom",
+            f"{self.keys_for_action('open_details')}  open selected session details",
+            (
+                f"{self.keys_for_action('back')} / {self.keys_for_action('back_or_quit')}  "
+                "return from details"
+            ),
+            f"{self.keys_for_action('cycle_sort')}  cycle sort field",
+            f"{self.keys_for_action('toggle_sort_direction')}  reverse sort direction",
+            f"{self.keys_for_action('filter')}  filter sessions; Esc clears/cancels filter input",
+            f"{self.keys_for_action('cycle_date_preset')}  cycle date range preset",
+            f"{self.keys_for_action('show_all_time')}  show all time",
+            (
+                f"{self.keys_for_action('shift_date_backward')} / "
+                f"{self.keys_for_action('shift_date_forward')}  move date range"
+            ),
+            f"{self.keys_for_action('reload')}  reload local Codex data",
+            f"{self.keys_for_action('open_settings')}  open settings",
+            f"{self.keys_for_action('help')}  open or close help",
+            f"{self.keys_for_action('quit')}  quit",
         ]
         top = max(1, (height - len(lines) - 2) // 2)
-        left = max(0, (width - 66) // 2)
-        box_width = min(width - left - 1, 66)
+        left = max(0, (width - 78) // 2)
+        box_width = min(width - left - 1, 78)
         if box_width <= 10:
             return
         border = "+" + "-" * (box_width - 2) + "+"
@@ -1772,6 +1893,9 @@ class CursesUi:
             curses.A_REVERSE,
             start_index=len(lines),
         )
+
+    def keys_for_action(self, action: str) -> str:
+        return format_keybinding_config(self.options.keybindings, action)
 
     def render_key_values(
         self, top: int, rows: list[tuple[str, str]], width: int, height: int
@@ -1799,9 +1923,18 @@ class CursesUi:
             f"{sqlite_status}"
         )
         footer = (
-            "Tab view  Enter details  j/k move  Pg page  s/S sort  "
-            "/ filter  d date  a all-time  [/] shift  "
-            "r reload  c settings  ? help  q quit"
+            f"{self.keys_for_action('next_view')} view  "
+            f"{self.keys_for_action('open_details')} details  "
+            f"{self.keys_for_action('move_down')}/{self.keys_for_action('move_up')} move  "
+            f"{self.keys_for_action('page_down')} page  "
+            f"{self.keys_for_action('cycle_sort')}/{self.keys_for_action('toggle_sort_direction')} sort  "
+            f"{self.keys_for_action('filter')} filter  "
+            f"{self.keys_for_action('cycle_date_preset')} date  "
+            f"{self.keys_for_action('show_all_time')} all-time  "
+            f"{self.keys_for_action('reload')} reload  "
+            f"{self.keys_for_action('open_settings')} settings  "
+            f"{self.keys_for_action('help')} help  "
+            f"{self.keys_for_action('quit')} quit"
         )
         if self.state.status:
             footer = f"{self.state.status} | {footer}"
@@ -1976,6 +2109,10 @@ def appearance_setting_label(field: str) -> str:
         "themed_bars": "themed usage bars",
     }
     return labels.get(field, field)
+
+
+def keybinding_action_label(action: str) -> str:
+    return KEYBINDING_ACTION_LABELS.get(action, action.replace("_", " "))
 
 
 def format_settings_rate(value: float) -> str:

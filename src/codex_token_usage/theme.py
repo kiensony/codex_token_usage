@@ -8,6 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Callable, TextIO
 
+from .keybindings import KeybindingConfig, parse_keybindings_config
 from .pricing import MODEL_PRICES, ModelPrice, PricingConfig, normalize_model_name
 
 CONFIG_VERSION = 1
@@ -222,6 +223,7 @@ class ThemeLoadResult:
     status: str = ""
     display: DisplayConfig = DisplayConfig()
     pricing: PricingConfig = PricingConfig()
+    keybindings: KeybindingConfig = KeybindingConfig()
 
 
 @dataclass(frozen=True)
@@ -256,11 +258,19 @@ def load_theme_config(path: Path | None = None) -> ThemeLoadResult:
             path=config_path,
             status=f"theme config ignored: {exc}",
         )
+    status = ""
+    try:
+        keybindings = parse_keybindings_config(raw)
+    except ValueError as exc:
+        keybindings = KeybindingConfig()
+        status = f"keybindings ignored: {exc}"
     return ThemeLoadResult(
         config=config,
         path=config_path,
+        status=status,
         display=display,
         pricing=pricing,
+        keybindings=keybindings,
     )
 
 
@@ -363,11 +373,13 @@ def save_theme_config(
     path: Path | None = None,
     display: DisplayConfig | None = None,
     pricing: PricingConfig | None = None,
+    keybindings: KeybindingConfig | None = None,
 ) -> Path:
     config_path = path or default_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
     display_config = display or DisplayConfig()
     pricing_config = pricing or PricingConfig()
+    keybinding_config = keybindings or KeybindingConfig()
     payload = {
         "version": CONFIG_VERSION,
         "theme": {
@@ -398,6 +410,10 @@ def save_theme_config(
                 }
                 for model, price in pricing_config.model_prices
             },
+        },
+        "keybindings": {
+            action: list(labels)
+            for action, labels in keybinding_config.as_dict().items()
         },
     }
     config_path.write_text(
@@ -663,6 +679,7 @@ def run_setup_wizard(
     current = result.config
     current_display = result.display
     current_pricing = result.pricing
+    current_keybindings = result.keybindings
 
     def write(line: str = "") -> None:
         output.write(line + "\n")
@@ -751,6 +768,7 @@ def run_setup_wizard(
         config_path,
         display=next_display,
         pricing=next_pricing,
+        keybindings=current_keybindings,
     )
     write(f"saved {saved}")
     return 0

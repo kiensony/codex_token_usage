@@ -32,13 +32,15 @@ Options:
 
 Settings are stored at `${XDG_CONFIG_HOME:-~/.config}/codex-token-usage/config.json`.
 The `--setup` wizard controls the theme, optional display columns, and custom model rates.
-Inside the TUI, `c` opens a curses settings screen for theme, display columns, model column width, and model rates without leaving the app.
+Inside the TUI, `c` opens a curses settings screen for theme, display columns, model column width, model rates, and main TUI keybindings without leaving the app.
 Available presets are loaded from HyFetch's preset table, including `rainbow`, `transgender`, `nonbinary`, `abrosexual`, `aromantic`, `intersex`, `progress`, `baker`, `band`, and many more. Compatibility aliases include `trans`, `nonhuman-unit`, and `ynullflux`.
 The TUI applies the selected flag palette to global chrome, headings, selected rows, and usage bars when curses reports color support. Table, JSON, and CSV output stay uncolored.
 
 Display settings can show or hide cached tokens, cached %, estimated API cost, reasoning level, cache miss, reasoning tokens, model, and cwd/title columns, and set the session table model column width to `auto` or a fixed 8-40 character width. Appearance settings can change the flag palette with a paged flag picker, color mode, lightness, accent line, and themed usage bars. Estimated cost uses standard OpenAI per-1M-token rates for known models, with any custom rates from setup overriding the built-in table. Unknown models show `n/a`; mixed aggregates with some unknown model rates are marked with `*`.
 
-TUI keys:
+Main TUI keybindings can be changed from the Keybindings settings tab or by editing the top-level `keybindings` object in the config file, for example `"next_view": ["n"]`. Missing actions use defaults. Supported key labels include printable characters, `Tab`, `Shift+Tab`, `Enter`, `Esc`, `Backspace`, `Up`, `Down`, `PageUp`, `PageDown`, `Home`, `End`, `Space`, `Comma`, and `Ctrl+A` through `Ctrl+Z`. Settings screens, prompts, and the flag picker keep their fixed local controls.
+
+Default TUI keys:
 
 - `Tab` / `Shift+Tab`: switch views
 - Arrow keys or `j`/`k`: move selection
@@ -59,12 +61,13 @@ TUI keys:
 
 TUI settings keys:
 
-- `1` / `2` / `3`: switch between Model Pricing, Display Columns, and Appearance tabs
+- `1` / `2` / `3` / `4`: switch between Model Pricing, Display Columns, Appearance, and Keybindings tabs
 - `h` / `j` / `k` / `l`: move the selected field or row in the active tab
 - `Enter`, `Space`, or `e`: edit or toggle the selected item
 - Model Pricing tab: `a` adds a custom model rate, `x` removes the selected model's custom override
 - Display Columns tab: toggles token/detail columns or edits model width
 - Appearance tab: opens a flag picker, cycles color mode, edits lightness, and toggles accent line or themed bars
+- Keybindings tab: edits comma-separated key labels, `x` resets the selected action to its default
 - Flag picker: `h` / `j` / `k` / `l` moves between flags, `n` / `p` changes page, `Enter` chooses
 - `s`: save settings
 - `q` / `Esc`: cancel settings changes

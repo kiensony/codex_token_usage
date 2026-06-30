@@ -145,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             theme=theme,
             display=theme_result.display,
             pricing=theme_result.pricing,
+            keybindings=theme_result.keybindings,
             theme_status=theme_result.status,
         )
     )
