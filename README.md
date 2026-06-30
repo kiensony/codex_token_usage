@@ -98,7 +98,7 @@ TUI settings keys:
 - Display Columns tab: toggles token/detail columns or edits model width
 - Appearance tab: opens a flag picker, cycles color mode, edits lightness, and toggles accent line or themed bars
 - Keybindings tab: select an action, `Enter` captures a replacement key, `a` captures an additional key, and `x` resets the selected action to its default
-- Misc tab: `Enter` cycles the prediction algorithm, edits auto refresh or shutdown seconds, or shows About
+- Misc tab: `Enter` cycles the prediction algorithm, edits auto refresh or shutdown seconds, shows About, or resets all setup after confirmation
 - Flag picker: `h` / `j` / `k` / `l` moves between flags, `n` / `p` changes page, `Enter` chooses
 - `s`: save settings, confirming first when settings changed
 - `q` / `Esc`: cancel settings, confirming discard when settings changed

@@ -148,6 +148,7 @@ MISC_SETTING_FIELDS = (
     "auto_refresh_seconds",
     "shutdown_seconds",
     "about",
+    "reset_setup",
 )
 FORCE_SHUTDOWN_KEYS = (27, ord("q"), ord("Q"))
 
@@ -844,6 +845,7 @@ class CursesUi:
         display = self.options.display
         custom_prices = dict(self.options.pricing.model_prices)
         keybindings = self.options.keybindings
+        limits = self.options.limits
         prediction = self.options.prediction
         auto_refresh_seconds = self.options.auto_refresh_seconds
         shutdown_seconds = self.options.shutdown_seconds
@@ -861,6 +863,7 @@ class CursesUi:
             display,
             custom_prices,
             keybindings,
+            limits,
             prediction,
             auto_refresh_seconds,
             shutdown_seconds,
@@ -896,6 +899,7 @@ class CursesUi:
                     display,
                     custom_prices,
                     keybindings,
+                    limits,
                     prediction,
                     auto_refresh_seconds,
                     shutdown_seconds,
@@ -928,7 +932,7 @@ class CursesUi:
                         display=display,
                         pricing=pricing,
                         keybindings=keybindings,
-                        limits=self.options.limits,
+                        limits=limits,
                         prediction=prediction,
                         auto_refresh_seconds=auto_refresh_seconds,
                         shutdown_seconds=shutdown_seconds,
@@ -1090,6 +1094,30 @@ class CursesUi:
                     )
                     continue
                 if tab_index == 4:
+                    misc_field = MISC_SETTING_FIELDS[misc_field_index]
+                    if misc_field == "reset_setup":
+                        if not self.confirm_settings_action(
+                            "Reset all setup to defaults? y/N: "
+                        ):
+                            status = "reset all setup canceled"
+                            continue
+                        (
+                            theme,
+                            display,
+                            custom_prices,
+                            keybindings,
+                            limits,
+                            prediction,
+                            auto_refresh_seconds,
+                            shutdown_seconds,
+                        ) = default_setup_values()
+                        model_index = 0
+                        rate_field_index = 0
+                        display_field_index = 0
+                        appearance_field_index = 0
+                        keybinding_index = 0
+                        status = "all setup reset to defaults; press s to save"
+                        continue
                     (
                         prediction,
                         auto_refresh_seconds,
@@ -1099,7 +1127,7 @@ class CursesUi:
                         prediction,
                         auto_refresh_seconds,
                         shutdown_seconds,
-                        MISC_SETTING_FIELDS[misc_field_index],
+                        misc_field,
                     )
                     continue
                 model = model_names[model_index]
@@ -1345,6 +1373,11 @@ class CursesUi:
                 "About",
                 "show",
             ),
+            (
+                "reset_setup",
+                "Reset all setup",
+                "confirm",
+            ),
         ]
         self.safe_addstr(top, 0, "Misc", self.accent_attr)
         for index, (_, label, value) in enumerate(rows):
@@ -1358,7 +1391,7 @@ class CursesUi:
         self.safe_addstr(
             top + 2 + len(rows) + 1,
             0,
-            "Enter cycles prediction algorithms, edits timings, or shows About.",
+            "Enter cycles prediction algorithms, edits timings, shows About, or resets setup.",
             curses.A_DIM,
         )
 
@@ -2640,6 +2673,7 @@ def settings_snapshot(
     display: DisplayConfig,
     custom_prices: dict[str, ModelPrice],
     keybindings: KeybindingConfig,
+    limits: LimitConfig,
     prediction: PredictionConfig,
     auto_refresh_seconds: int | None,
     shutdown_seconds: float,
@@ -2649,9 +2683,32 @@ def settings_snapshot(
         display,
         tuple(sorted(custom_prices.items())),
         keybindings,
+        limits,
         prediction,
         auto_refresh_seconds,
         shutdown_seconds,
+    )
+
+
+def default_setup_values() -> tuple[
+    ThemeConfig,
+    DisplayConfig,
+    dict[str, ModelPrice],
+    KeybindingConfig,
+    LimitConfig,
+    PredictionConfig,
+    int | None,
+    float,
+]:
+    return (
+        ThemeConfig(),
+        DisplayConfig(),
+        {},
+        KeybindingConfig(),
+        LimitConfig(),
+        PredictionConfig(),
+        None,
+        DEFAULT_SHUTDOWN_SECONDS,
     )
 
 
@@ -2727,7 +2784,9 @@ def misc_setting_label(field: str) -> str:
     labels = {
         "prediction_algorithm": "prediction algorithm",
         "auto_refresh_seconds": "auto refresh",
+        "shutdown_seconds": "shutdown time",
         "about": "about",
+        "reset_setup": "reset all setup",
     }
     return labels.get(field, field)
 

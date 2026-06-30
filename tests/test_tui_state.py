@@ -28,6 +28,7 @@ from codex_token_usage.tui import (
     cycle_prediction_algorithm,
     cycle_theme_color_mode,
     cycle_theme_preset,
+    default_setup_values,
     display_setting_label,
     flag_picker_block_height,
     farewell_flag_height,
@@ -343,6 +344,8 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(display_setting_label("estimated_cost"), "estimated cost")
         self.assertEqual(appearance_setting_label("themed_bars"), "themed usage bars")
         self.assertEqual(misc_setting_label("about"), "about")
+        self.assertEqual(misc_setting_label("reset_setup"), "reset all setup")
+        self.assertEqual(misc_setting_label("shutdown_seconds"), "shutdown time")
         self.assertEqual(prediction_algorithm_label("recent_rate"), "recent rate")
         self.assertEqual(auto_refresh_label(None), "off")
         self.assertEqual(auto_refresh_label(1), "1 second")
@@ -364,6 +367,7 @@ class TuiStateTests(unittest.TestCase):
             DisplayConfig(),
             custom,
             KeybindingConfig(),
+            LimitConfig(),
             PredictionConfig(),
             None,
             2.45,
@@ -373,11 +377,25 @@ class TuiStateTests(unittest.TestCase):
             DisplayConfig(show_model=False),
             custom,
             KeybindingConfig(),
+            LimitConfig(),
             PredictionConfig(),
             None,
             2.45,
         )
         self.assertNotEqual(base_snapshot, changed_snapshot)
+        self.assertEqual(
+            default_setup_values(),
+            (
+                ThemeConfig(),
+                DisplayConfig(),
+                {},
+                KeybindingConfig(),
+                LimitConfig(),
+                PredictionConfig(),
+                None,
+                2.45,
+            ),
+        )
 
     def test_confirm_settings_action(self) -> None:
         ui = CursesUi(
