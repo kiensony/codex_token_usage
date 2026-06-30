@@ -13,7 +13,7 @@ class PromptMixin:
         height, width = self.stdscr.getmaxyx()
         value = initial
         position = len(value)
-        curses.curs_set(1)
+        self.set_cursor_visible(True)
         try:
             while True:
                 self.stdscr.move(height - 1, 0)
@@ -47,7 +47,7 @@ class PromptMixin:
                     value = value[:position] + chr(key) + value[position:]
                     position += 1
         finally:
-            curses.curs_set(0)
+            self.set_cursor_visible(False)
 
     def confirm_settings_action(self, prompt: str) -> bool:
         height, width = self.stdscr.getmaxyx()
@@ -151,7 +151,7 @@ class PromptMixin:
         self.stdscr.move(height - 1, 0)
         self.stdscr.clrtoeol()
         self.safe_addstr(height - 1, 0, prompt)
-        curses.curs_set(1)
+        self.set_cursor_visible(True)
         value = self.state.filter_text
         position = len(value)
         try:
@@ -192,4 +192,10 @@ class PromptMixin:
                     value = value[:position] + chr(key) + value[position:]
                     position += 1
         finally:
-            curses.curs_set(0)
+            self.set_cursor_visible(False)
+
+    def set_cursor_visible(self, visible: bool) -> None:
+        try:
+            curses.curs_set(1 if visible else 0)
+        except curses.error:
+            return

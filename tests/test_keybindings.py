@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from codex_token_usage.keybindings import (
+    DEFAULT_KEYBINDINGS,
     KeybindingConfig,
     key_codes_for_label,
     key_label_for_code,
@@ -21,6 +22,12 @@ class KeybindingTests(unittest.TestCase):
         self.assertEqual(config.labels("open_about"), ("a",))
         self.assertEqual(config.labels("show_all_time"), ("A",))
         self.assertEqual(config.labels("quit"), ("q", "Ctrl+C"))
+        all_default_labels = {
+            label
+            for labels in DEFAULT_KEYBINDINGS.values()
+            for label in labels
+        }
+        self.assertNotIn("Ctrl+S", all_default_labels)
 
     def test_old_all_time_default_migrates_when_about_is_missing(self) -> None:
         config = parse_keybindings_config({"keybindings": {"show_all_time": ["a"]}})
@@ -46,6 +53,14 @@ class KeybindingTests(unittest.TestCase):
     def test_conflicting_bindings_are_rejected(self) -> None:
         with self.assertRaises(ValueError):
             update_keybinding(KeybindingConfig(), "next_view", ("j",))
+
+    def test_ctrl_s_is_reserved_for_private_tui_handler(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_keybinding_text("Ctrl+S")
+        with self.assertRaises(ValueError):
+            update_keybinding(KeybindingConfig(), "next_view", ("Ctrl+S",))
+        with self.assertRaises(ValueError):
+            parse_keybindings_config({"keybindings": {"next_view": ["Ctrl+S"]}})
 
     def test_update_keybinding_returns_normalized_config(self) -> None:
         config = update_keybinding(KeybindingConfig(), "next_view", ("n", "Ctrl+X"))

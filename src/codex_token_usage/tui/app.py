@@ -10,6 +10,14 @@ from ..loader import load_usage
 from ..models import UsageDataset
 from ..theme import RGB
 from .prompts import PromptMixin
+from .secret_codes import (
+    EMERGENCY_EXIT_CODE,
+    SECRET_CODE_KEY,
+    SECRET_PROMPT,
+    EmergencyCrash,
+    render_secret_code,
+    render_terminal_emergency_crash,
+)
 from .settings_screen import SettingsScreenMixin
 from .state import TuiOptions, TuiState
 from .theme_renderer import ThemeRendererMixin
@@ -31,7 +39,11 @@ def run_tui(options: TuiOptions) -> int:
         pricing=options.pricing,
         status=options.theme_status,
     )
-    curses.wrapper(lambda stdscr: CursesUi(stdscr, state, options).run())
+    try:
+        curses.wrapper(lambda stdscr: CursesUi(stdscr, state, options).run())
+    except EmergencyCrash:
+        render_terminal_emergency_crash()
+        return EMERGENCY_EXIT_CODE
     return 0
 
 
@@ -46,13 +58,16 @@ class CursesUi(ThemeRendererMixin, PromptMixin, SettingsScreenMixin, ViewRendere
         self.preview_pairs: dict[RGB, int] = {}
         self.accent_attr = curses.A_BOLD
         self.next_auto_refresh_at: float | None = None
+        self._suppress_farewell = False
 
     def run(self) -> None:
-        curses.curs_set(0)
-        self.stdscr.keypad(True)
-        self.init_theme_colors()
-        self.schedule_next_auto_refresh()
+        raw_input = False
         try:
+            curses.curs_set(0)
+            raw_input = self.enable_raw_input()
+            self.stdscr.keypad(True)
+            self.init_theme_colors()
+            self.schedule_next_auto_refresh()
             while not self.state.should_quit:
                 self.render()
                 self.configure_input_timeout()
@@ -64,7 +79,12 @@ class CursesUi(ThemeRendererMixin, PromptMixin, SettingsScreenMixin, ViewRendere
         except KeyboardInterrupt:
             self.state = self.state.quit()
         finally:
-            self.render_farewell()
+            try:
+                if not self._suppress_farewell:
+                    self.render_farewell()
+            finally:
+                if raw_input:
+                    self.disable_raw_input()
 
     def handle_key(self, key: int) -> None:
         action = self.keymap.get(key)
@@ -80,6 +100,10 @@ class CursesUi(ThemeRendererMixin, PromptMixin, SettingsScreenMixin, ViewRendere
                 27,
             ):
                 self.state = self.state.close_about()
+            return
+
+        if key == SECRET_CODE_KEY:
+            self.prompt_secret_code()
             return
 
         if action == "quit":
@@ -134,6 +158,46 @@ class CursesUi(ThemeRendererMixin, PromptMixin, SettingsScreenMixin, ViewRendere
             self.state = self.state.close_details()
         elif action == "help":
             self.state = self.state.open_help()
+
+    def enable_raw_input(self) -> bool:
+        try:
+            curses.raw()
+        except curses.error:
+            return False
+        return True
+
+    def disable_raw_input(self) -> None:
+        try:
+            curses.noraw()
+        except curses.error:
+            return
+
+    def suppress_farewell(self) -> None:
+        self._suppress_farewell = True
+
+    def prompt_secret_code(self) -> None:
+        if self.stdscr is None:
+            return
+        original_status = self.state.status
+        self.set_blocking_input()
+        try:
+            code = self.prompt_input(SECRET_PROMPT)
+            if code is None:
+                self.clear_bottom_line()
+                return
+            if not render_secret_code(self, code):
+                self.clear_bottom_line()
+        finally:
+            if self.state.status != original_status:
+                self.state = replace(self.state, status=original_status)
+
+    def clear_bottom_line(self) -> None:
+        if self.stdscr is None:
+            return
+        height, _width = self.stdscr.getmaxyx()
+        self.stdscr.move(height - 1, 0)
+        self.stdscr.clrtoeol()
+        self.stdscr.refresh()
 
     def reload_dataset(self, since: date | None, until: date | None) -> UsageDataset:
         return load_usage(

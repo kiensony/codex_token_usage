@@ -84,6 +84,9 @@ DEFAULT_KEYBINDINGS: dict[str, tuple[str, ...]] = {
 DEFAULT_KEYBINDING_ITEMS = tuple(
     (action, DEFAULT_KEYBINDINGS[action]) for action in KEYBINDING_ACTIONS
 )
+RESERVED_KEY_CODES = {
+    19: "Ctrl+S",
+}
 
 NAMED_KEY_CODES: dict[str, tuple[str, tuple[int, ...]]] = {
     "tab": ("Tab", (9,)),
@@ -175,6 +178,7 @@ def normalize_key_labels(labels: tuple[str, ...], action: str) -> tuple[str, ...
     if not labels:
         raise ValueError(f"{action} must have at least one key")
     normalized = tuple(normalize_key_label(label) for label in labels)
+    validate_configurable_key_labels(normalized)
     if len(set(normalized)) != len(normalized):
         raise ValueError(f"{action} has duplicate keys")
     return normalized
@@ -219,6 +223,8 @@ def validate_keybindings(bindings: dict[str, tuple[str, ...]]) -> None:
             raise ValueError(f"{action} must have at least one key")
         for label in labels:
             for code in key_codes_for_label(label):
+                if code in RESERVED_KEY_CODES:
+                    raise ValueError(f"{RESERVED_KEY_CODES[code]} is reserved")
                 existing = seen_codes.get(code)
                 if existing is not None and existing != action:
                     raise ValueError(
@@ -236,6 +242,13 @@ def keymap_for_config(config: KeybindingConfig) -> dict[int, str]:
             for code in key_codes_for_label(label):
                 keymap[code] = action
     return keymap
+
+
+def validate_configurable_key_labels(labels: tuple[str, ...]) -> None:
+    for label in labels:
+        for code in key_codes_for_label(label):
+            if code in RESERVED_KEY_CODES:
+                raise ValueError(f"{RESERVED_KEY_CODES[code]} is reserved")
 
 
 def normalize_key_label(label: str) -> str:

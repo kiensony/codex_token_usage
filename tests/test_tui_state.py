@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from datetime import date, datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 from codex_token_usage.forecast import LimitConfig, PredictionConfig, make_usage_forecast
 from codex_token_usage.keybindings import KeybindingConfig, update_keybinding
@@ -49,6 +50,7 @@ from codex_token_usage.tui import (
     pride_community_message,
     pride_message_for_preset,
     pride_messages_for_presets,
+    run_tui,
     settings_model_names,
     settings_price_source,
     settings_rate_text,
@@ -60,6 +62,23 @@ from codex_token_usage.tui import (
     truncate,
     usage_bar,
     visible_start,
+)
+from codex_token_usage.tui.secret_codes import (
+    EFFECT_BIRTHDAY,
+    EFFECT_EMERGENCY,
+    EFFECT_HEART,
+    EFFECT_NYAN,
+    EFFECT_PWNED,
+    EFFECT_TRANS_FLAG,
+    EMERGENCY_CRASH_LINES,
+    EMERGENCY_CODES,
+    EMERGENCY_EXIT_CODE,
+    EMERGENCY_MESSAGE,
+    EmergencyCrash,
+    SECRET_CODE_EFFECTS,
+    SECRET_CODE_KEY,
+    SECRET_PROMPT,
+    emergency_crash_screen,
 )
 
 
@@ -309,6 +328,282 @@ class TuiStateTests(unittest.TestCase):
         ui.handle_key(ord("n"))
         self.assertEqual(ui.state.view, "daily")
 
+    def test_ctrl_s_opens_hidden_prompt(self) -> None:
+        stdscr = FakeStdScr([27])
+        ui = CursesUi(
+            stdscr,
+            TuiState(dataset=dataset(), status="keep"),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        ui.handle_key(SECRET_CODE_KEY)
+
+        self.assertIn((23, 0, SECRET_PROMPT, 0), stdscr.writes)
+        self.assertEqual(ui.state.status, "keep")
+
+    def test_invalid_secret_code_returns_silently(self) -> None:
+        stdscr = FakeStdScr([ord("x"), 10])
+        ui = CursesUi(
+            stdscr,
+            TuiState(dataset=dataset(), status="keep"),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        ui.handle_key(SECRET_CODE_KEY)
+
+        self.assertEqual(ui.state.status, "keep")
+        self.assertEqual(ui.state.view, "overview")
+
+    def test_secret_codes_route_to_private_effects(self) -> None:
+        expected_effects = {
+            "2109": EFFECT_BIRTHDAY,
+            "1976": EFFECT_HEART,
+            "2011": EFFECT_NYAN,
+            "iamdeveloper": EFFECT_TRANS_FLAG,
+            "pwned": EFFECT_PWNED,
+        }
+        for code, expected in expected_effects.items():
+            with self.subTest(code=code):
+                keys = [ord(char) for char in code] + [10]
+                ui = CursesUi(
+                    FakeStdScr(keys),
+                    TuiState(dataset=dataset(), status="keep"),
+                    TuiOptions(codex_home=Path("/tmp")),
+                )
+
+                with mock.patch(
+                    "codex_token_usage.tui.secret_codes.render_secret_effect"
+                ) as rendered:
+                    ui.handle_key(SECRET_CODE_KEY)
+
+                rendered.assert_called_once_with(ui, expected)
+                self.assertEqual(ui.state.status, "keep")
+
+    def test_secret_effect_stays_until_q_or_esc(self) -> None:
+        for dismiss_key in (ord("q"), 27):
+            with self.subTest(dismiss_key=dismiss_key):
+                keys = [ord(char) for char in "1976"] + [10, dismiss_key]
+                stdscr = FakeStdScr(keys)
+                ui = CursesUi(
+                    stdscr,
+                    TuiState(dataset=dataset(), status="keep"),
+                    TuiOptions(codex_home=Path("/tmp")),
+                )
+
+                with mock.patch("codex_token_usage.tui.secret_codes.curses.napms"):
+                    ui.handle_key(SECRET_CODE_KEY)
+
+                self.assertIn("     *     ", [write[2] for write in stdscr.writes])
+                self.assertEqual(ui.state.status, "keep")
+
+    def test_cake_and_nyan_loop_until_dismissal(self) -> None:
+        cases = {
+            "2109": ("     |    HAPPY 5TH    |", 90, (24, 80)),
+            "2011": ("XXKKK00000000kxO000xxO000000KKXXO", 100, (38, 120)),
+        }
+        for code, (expected_line, expected_timeout, size) in cases.items():
+            with self.subTest(code=code):
+                keys = [ord(char) for char in code] + [10, ord("q")]
+                stdscr = FakeStdScr(keys, size=size)
+                ui = CursesUi(
+                    stdscr,
+                    TuiState(dataset=dataset(), status="keep"),
+                    TuiOptions(codex_home=Path("/tmp")),
+                )
+
+                with mock.patch("codex_token_usage.tui.secret_codes.curses.napms"):
+                    ui.handle_key(SECRET_CODE_KEY)
+
+                self.assertTrue(
+                    any(expected_line in text for _y, _x, text, _attr in stdscr.writes)
+                )
+                self.assertIn(expected_timeout, stdscr.timeouts)
+                self.assertEqual(ui.state.status, "keep")
+
+    def test_nyan_cat_uses_reference_frames_until_dismissal(self) -> None:
+        keys = [ord(char) for char in "2011"] + [10, ord("q")]
+        stdscr = FakeStdScr(keys, size=(38, 120))
+        ui = CursesUi(
+            stdscr,
+            TuiState(dataset=dataset(), status="keep"),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        ui.preview_attr = lambda _rgb, base_attr=0: base_attr
+
+        ui.handle_key(SECRET_CODE_KEY)
+
+        self.assertIn(100, stdscr.timeouts)
+        self.assertTrue(
+            any(
+                "XXKKK00000000kxO000xxO000000KKXXO" in text
+                for _y, _x, text, _attr in stdscr.writes
+            )
+        )
+        self.assertTrue(any(attr for _y, _x, _text, attr in stdscr.writes))
+        self.assertEqual(ui.state.status, "keep")
+
+    def test_nyan_cat_resizes_to_screen_width_with_320_column_cap(self) -> None:
+        cases = (
+            ((38, 80), 80),
+            ((120, 400), 320),
+        )
+        for size, expected_width in cases:
+            with self.subTest(size=size):
+                keys = [ord(char) for char in "2011"] + [10, ord("q")]
+                stdscr = FakeStdScr(keys, size=size)
+                ui = CursesUi(
+                    stdscr,
+                    TuiState(dataset=dataset(), status="keep"),
+                    TuiOptions(codex_home=Path("/tmp")),
+                )
+                ui.preview_attr = lambda _rgb, base_attr=0: base_attr
+
+                ui.handle_key(SECRET_CODE_KEY)
+
+                rendered_widths = {len(text) for _y, _x, text, _attr in stdscr.writes}
+                self.assertEqual({expected_width}, rendered_widths)
+                self.assertTrue(all(x >= 0 for _y, x, _text, _attr in stdscr.writes))
+                self.assertEqual(ui.state.status, "keep")
+
+    def test_pwned_secret_shows_fake_root_prompt_and_troll_responses(self) -> None:
+        keys = (
+            [ord(char) for char in "pwned"]
+            + [10]
+            + [ord(char) for char in "whoami"]
+            + [10]
+            + [ord(char) for char in "date"]
+            + [10, ord("q")]
+        )
+        stdscr = FakeStdScr(keys, size=(24, 100))
+        ui = CursesUi(
+            stdscr,
+            TuiState(dataset=dataset(), status="keep"),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        ui.preview_attr = lambda _rgb, base_attr=0: base_attr
+
+        with mock.patch(
+            "codex_token_usage.tui.secret_codes.socket.gethostname",
+            return_value="academy",
+        ), mock.patch("codex_token_usage.tui.secret_codes.curses.napms"):
+            ui.handle_key(SECRET_CODE_KEY)
+
+        rendered = [write[2] for write in stdscr.writes]
+        self.assertIn("[+] success: pretend root shell established", rendered)
+        self.assertIn("root@academy:~# whoami", rendered)
+        self.assertIn("root@academy:~# date", rendered)
+        self.assertTrue(any("you have been trolled" in text for text in rendered))
+        self.assertTrue(any("modest elegance" in text for text in rendered))
+        self.assertEqual(ui.state.status, "keep")
+
+    def test_pwned_secret_uses_hacker_hostname_fallback(self) -> None:
+        keys = [ord(char) for char in "pwned"] + [10, ord("q")]
+        stdscr = FakeStdScr(keys, size=(24, 100))
+        ui = CursesUi(
+            stdscr,
+            TuiState(dataset=dataset(), status="keep"),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        ui.preview_attr = lambda _rgb, base_attr=0: base_attr
+
+        with mock.patch(
+            "codex_token_usage.tui.secret_codes.socket.gethostname",
+            side_effect=OSError,
+        ), mock.patch("codex_token_usage.tui.secret_codes.curses.napms"):
+            ui.handle_key(SECRET_CODE_KEY)
+
+        self.assertIn("root@hacker:~# ", [write[2] for write in stdscr.writes])
+        self.assertEqual(ui.state.status, "keep")
+
+    def test_trans_flag_waves_vertically_until_dismissal(self) -> None:
+        cases = (
+            ((24, 80), 6, 72, 11),
+            ((40, 160), 12, 144, 21),
+        )
+        for size, segment_width, flag_width, flag_height in cases:
+            with self.subTest(size=size):
+                keys = [ord(char) for char in "iamdeveloper"] + [10, -1, -1, ord("q")]
+                stdscr = FakeStdScr(keys, size=size)
+                ui = CursesUi(
+                    stdscr,
+                    TuiState(dataset=dataset(), status="keep"),
+                    TuiOptions(codex_home=Path("/tmp")),
+                )
+                ui.preview_attr = lambda _rgb, base_attr=0: base_attr
+
+                ui.handle_key(SECRET_CODE_KEY)
+
+                self.assertIn(140, stdscr.timeouts)
+                rendered_rows = {y for y, _x, _text, _attr in stdscr.writes}
+                self.assertEqual(flag_height, max(rendered_rows) - min(rendered_rows) + 1)
+                self.assertEqual(
+                    {segment_width},
+                    {len(text) for _y, _x, text, _attr in stdscr.writes},
+                )
+                rendered_columns = {x for _y, x, _text, _attr in stdscr.writes}
+                self.assertEqual(0, len(rendered_columns) % 2)
+                self.assertEqual(flag_width, len(rendered_columns) * segment_width)
+                self.assertTrue(
+                    all(text.strip() == "" for _y, _x, text, _attr in stdscr.writes)
+                )
+                self.assertEqual(ui.state.status, "keep")
+
+    def test_emergency_secret_codes_render_warning_and_crash(self) -> None:
+        for code in sorted(EMERGENCY_CODES):
+            with self.subTest(code=code):
+                keys = [ord(char) for char in code] + [10, ord("q")]
+                stdscr = FakeStdScr(keys)
+                ui = CursesUi(
+                    stdscr,
+                    TuiState(dataset=dataset(), status="keep"),
+                    TuiOptions(codex_home=Path("/tmp")),
+                )
+
+                with mock.patch(
+                    "codex_token_usage.tui.secret_codes.curses.napms"
+                ), self.assertRaises(SystemExit) as raised:
+                    ui.handle_key(SECRET_CODE_KEY)
+
+                self.assertEqual(raised.exception.code, EMERGENCY_EXIT_CODE)
+                self.assertIsInstance(raised.exception, EmergencyCrash)
+                self.assertIn(EMERGENCY_MESSAGE, [write[2] for write in stdscr.writes])
+                self.assertTrue(ui._suppress_farewell)
+                self.assertEqual(SECRET_CODE_EFFECTS[code], EFFECT_EMERGENCY)
+
+    def test_emergency_crash_screen_renders_after_curses_shutdown(self) -> None:
+        with mock.patch(
+            "codex_token_usage.tui.app.load_usage",
+            return_value=dataset(),
+        ), mock.patch(
+            "codex_token_usage.tui.app.curses.wrapper",
+            side_effect=EmergencyCrash(),
+        ), mock.patch(
+            "codex_token_usage.tui.app.render_terminal_emergency_crash",
+        ) as rendered:
+            code = run_tui(TuiOptions(codex_home=Path("/tmp")))
+
+        self.assertEqual(code, EMERGENCY_EXIT_CODE)
+        rendered.assert_called_once_with()
+
+        screen = emergency_crash_screen((8, 72))
+        for line in EMERGENCY_CRASH_LINES:
+            self.assertIn(line, screen)
+
+    def test_custom_keymap_cannot_override_hidden_ctrl_s_handler(self) -> None:
+        stdscr = FakeStdScr([ord("x"), 10])
+        ui = CursesUi(
+            stdscr,
+            TuiState(dataset=dataset(), status="keep"),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        ui.keymap[SECRET_CODE_KEY] = "next_view"
+
+        ui.handle_key(SECRET_CODE_KEY)
+
+        self.assertEqual(ui.state.view, "overview")
+        self.assertEqual(ui.state.status, "keep")
+        self.assertIn((23, 0, SECRET_PROMPT, 0), stdscr.writes)
+
     def test_c_key_opens_settings_without_crashing(self) -> None:
         ui = CursesUi(
             FakeStdScr([ord("q")]),
@@ -341,6 +636,18 @@ class TuiStateTests(unittest.TestCase):
         )
         self.assertEqual(keybindings.labels("next_view"), ("n", "m"))
         self.assertEqual(status, "Next view: n, m")
+
+        ui = CursesUi(
+            FakeStdScr([SECRET_CODE_KEY]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        keybindings, status = ui.apply_keybinding_setting(
+            KeybindingConfig(),
+            "next_view",
+        )
+        self.assertEqual(keybindings.labels("next_view"), ("Tab",))
+        self.assertEqual(status, "Ctrl+S is reserved")
 
     def test_settings_helpers(self) -> None:
         custom = {"custom-model": ModelPrice(1.0, 0.1, 2.0)}
