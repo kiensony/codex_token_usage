@@ -7,6 +7,7 @@ from codex_token_usage.keybindings import (
     key_codes_for_label,
     key_label_for_code,
     normalize_key_label,
+    parse_keybindings_config,
     parse_keybinding_text,
     reset_keybinding,
     update_keybinding,
@@ -14,6 +15,18 @@ from codex_token_usage.keybindings import (
 
 
 class KeybindingTests(unittest.TestCase):
+    def test_about_and_all_time_defaults_do_not_conflict(self) -> None:
+        config = KeybindingConfig()
+
+        self.assertEqual(config.labels("open_about"), ("a",))
+        self.assertEqual(config.labels("show_all_time"), ("A",))
+
+    def test_old_all_time_default_migrates_when_about_is_missing(self) -> None:
+        config = parse_keybindings_config({"keybindings": {"show_all_time": ["a"]}})
+
+        self.assertEqual(config.labels("open_about"), ("a",))
+        self.assertEqual(config.labels("show_all_time"), ("A",))
+
     def test_parse_named_printable_and_control_keys(self) -> None:
         self.assertEqual(normalize_key_label("PgUp"), "PageUp")
         self.assertEqual(normalize_key_label("ctrl+x"), "Ctrl+X")

@@ -5,8 +5,10 @@ import time
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
+from textwrap import wrap
 from typing import Callable
 
+from . import __version__
 from .forecast import (
     PREDICTION_ALGORITHMS,
     ForecastWindow,
@@ -139,7 +141,7 @@ APPEARANCE_SETTING_FIELDS = (
     "accent_line",
     "themed_bars",
 )
-MISC_SETTING_FIELDS = ("prediction_algorithm", "auto_refresh_seconds")
+MISC_SETTING_FIELDS = ("prediction_algorithm", "auto_refresh_seconds", "about")
 
 
 @dataclass(frozen=True)
@@ -171,6 +173,7 @@ class TuiState:
     since: date | None = None
     until: date | None = None
     help_open: bool = False
+    about_open: bool = False
     should_quit: bool = False
     status: str = ""
     today: date | None = None
@@ -340,13 +343,22 @@ class TuiState:
         return replace(self, should_quit=True)
 
     def open_help(self) -> "TuiState":
-        return replace(self, help_open=True, status="")
+        return replace(self, help_open=True, about_open=False, status="")
 
     def close_help(self) -> "TuiState":
         return replace(self, help_open=False, status="")
 
     def toggle_help(self) -> "TuiState":
         return self.close_help() if self.help_open else self.open_help()
+
+    def open_about(self) -> "TuiState":
+        return replace(self, about_open=True, help_open=False, status="")
+
+    def close_about(self) -> "TuiState":
+        return replace(self, about_open=False, status="")
+
+    def toggle_about(self) -> "TuiState":
+        return self.close_about() if self.about_open else self.open_about()
 
     def visible_sessions(self) -> list[SessionUsage]:
         sessions = [
@@ -691,6 +703,15 @@ class CursesUi:
             if action in ("help", "quit", "back_or_quit") or key == 27:
                 self.state = self.state.close_help()
             return
+        if self.state.about_open:
+            if action in ("open_about", "quit", "back_or_quit") or key in (
+                10,
+                13,
+                curses.KEY_ENTER,
+                27,
+            ):
+                self.state = self.state.close_about()
+            return
 
         if action == "quit":
             self.state = self.state.quit()
@@ -736,6 +757,8 @@ class CursesUi:
             self.schedule_next_auto_refresh()
         elif action == "open_settings":
             self.open_settings()
+        elif action == "open_about":
+            self.state = self.state.open_about()
         elif action == "filter":
             self.prompt_filter()
         elif action == "back":
@@ -1254,6 +1277,11 @@ class CursesUi:
                 "Auto refresh",
                 auto_refresh_label(auto_refresh_seconds),
             ),
+            (
+                "about",
+                "About",
+                "show",
+            ),
         ]
         self.safe_addstr(top, 0, "Misc", self.accent_attr)
         for index, (_, label, value) in enumerate(rows):
@@ -1491,6 +1519,9 @@ class CursesUi:
                 parsed_refresh,
                 f"auto refresh: {auto_refresh_label(parsed_refresh)}",
             )
+        if field == "about":
+            self.show_about_dialog()
+            return prediction, auto_refresh_seconds, "about shown"
         return prediction, auto_refresh_seconds, "unknown misc setting"
 
     def apply_keybinding_setting(
@@ -1859,6 +1890,8 @@ class CursesUi:
             self.render_details(height, width)
         if self.state.help_open:
             self.render_help(height, width)
+        if self.state.about_open:
+            self.render_about(height, width)
         self.render_footer(height, width)
         self.stdscr.refresh()
 
@@ -2213,6 +2246,7 @@ class CursesUi:
             ),
             f"{self.keys_for_action('reload')}  reload local Codex data",
             f"{self.keys_for_action('open_settings')}  open settings",
+            f"{self.keys_for_action('open_about')}  about this software",
             f"{self.keys_for_action('help')}  open or close help",
             f"{self.keys_for_action('quit')}  quit",
         ]
@@ -2225,6 +2259,35 @@ class CursesUi:
         self.render_themed_text(top, left, border, curses.A_REVERSE)
         for index, line in enumerate(lines, start=1):
             text = f"| {line:<{box_width - 4}} |"
+            attr = curses.A_BOLD if index == 1 else curses.A_REVERSE
+            self.safe_addstr(top + index, left, text[:box_width], attr)
+        self.render_themed_text(
+            top + len(lines) + 1,
+            left,
+            border,
+            curses.A_REVERSE,
+            start_index=len(lines),
+        )
+
+    def show_about_dialog(self) -> None:
+        self.set_blocking_input()
+        height, width = self.stdscr.getmaxyx()
+        self.render_about(height, width)
+        self.stdscr.refresh()
+        self.stdscr.getch()
+
+    def render_about(self, height: int, width: int) -> None:
+        left = max(0, (width - 78) // 2)
+        box_width = min(width - left - 1, 78)
+        if box_width <= 10:
+            return
+        cell_width = box_width - 4
+        lines = about_content_lines(self.options.theme, cell_width)
+        top = max(1, (height - len(lines) - 2) // 2)
+        border = "+" + "-" * (box_width - 2) + "+"
+        self.render_themed_text(top, left, border, curses.A_REVERSE)
+        for index, line in enumerate(lines, start=1):
+            text = f"| {line:<{cell_width}} |"
             attr = curses.A_BOLD if index == 1 else curses.A_REVERSE
             self.safe_addstr(top + index, left, text[:box_width], attr)
         self.render_themed_text(
@@ -2274,6 +2337,7 @@ class CursesUi:
             f"{self.keys_for_action('show_all_time')} all-time  "
             f"{self.keys_for_action('reload')} reload  "
             f"{self.keys_for_action('open_settings')} settings  "
+            f"{self.keys_for_action('open_about')} about  "
             f"{self.keys_for_action('help')} help  "
             f"{self.keys_for_action('quit')} quit"
         )
@@ -2298,7 +2362,14 @@ class CursesUi:
         height, width = self.stdscr.getmaxyx()
         if y < 0 or y >= height or x < 0 or x >= width:
             return
-        self.stdscr.addstr(y, x, text[: max(0, width - x - 1)], attr)
+        clipped = text[: max(0, width - x)]
+        try:
+            self.stdscr.addstr(y, x, clipped, attr)
+        except curses.error:
+            if y == height - 1 and x + len(clipped) >= width and clipped:
+                self.stdscr.addstr(y, x, clipped[:-1], attr)
+                return
+            raise
 
     def render_themed_text(
         self,
@@ -2315,7 +2386,7 @@ class CursesUi:
         height, width = self.stdscr.getmaxyx()
         if y < 0 or y >= height or x < 0 or x >= width:
             return
-        text = text[: max(0, width - x - 1)]
+        text = text[: max(0, width - x)]
         if not text:
             return
 
@@ -2456,6 +2527,7 @@ def misc_setting_label(field: str) -> str:
     labels = {
         "prediction_algorithm": "prediction algorithm",
         "auto_refresh_seconds": "auto refresh",
+        "about": "about",
     }
     return labels.get(field, field)
 
@@ -2543,9 +2615,56 @@ def theme_current_preset_label(theme: ThemeConfig) -> str:
 
 def flag_display_name(preset: str) -> str:
     names = {
+        "all": "all communities",
         "trans": "transgender",
     }
-    return names.get(preset, preset)
+    name = names.get(preset, preset)
+    return name.replace(".", " ").replace("-", " ")
+
+
+def pride_community_message(theme: ThemeConfig) -> str:
+    return pride_message_for_preset(theme_current_preset(theme))
+
+
+ABOUT_DESCRIPTION = (
+    "A local terminal application for inspecting Codex CLI token usage, forecasts, "
+    "pricing estimates, sessions, models, and project folders from your local "
+    "Codex data."
+)
+
+
+def about_content_lines(theme: ThemeConfig, width: int) -> tuple[str, ...]:
+    content = [
+        "About",
+        "Codex Token Usage",
+        f"Version {__version__}",
+    ]
+    for paragraph in (ABOUT_DESCRIPTION, pride_community_message(theme)):
+        content.extend(wrap_text(paragraph, width))
+    return tuple(content)
+
+
+def wrap_text(text: str, width: int) -> list[str]:
+    if width <= 0:
+        return [""]
+    return wrap(text, width=width) or [""]
+
+
+def pride_message_for_preset(preset: str) -> str:
+    if preset == "all":
+        return (
+            "Pride: every community in this app belongs here; "
+            "be yourself and be proud to be there."
+        )
+    community = flag_display_name(preset)
+    return (
+        f"Pride: {community} community, you belong here; "
+        "be yourself and be proud to be there."
+    )
+
+
+def pride_messages_for_presets(presets: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(pride_message_for_preset(preset) for preset in presets)
 
 
 def flag_picker_block_height(terminal_height: int) -> int:

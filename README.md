@@ -78,10 +78,11 @@ Default TUI keys:
 - `S`: reverse sort direction
 - `/`: filter by cwd, model, title, or session id
 - `d`: change date range preset
-- `a`: show all time
+- `A`: show all time
 - `[` / `]`: move the active date range backward or forward
 - `r`: reload local data
 - `c`: open TUI settings for theme, display columns, model width, model rates, and prediction algorithm
+- `a`: show about this software
 - `?`: show help
 - `Backspace` / `Esc`: return from session details
 - `q`: quit
@@ -95,7 +96,7 @@ TUI settings keys:
 - Display Columns tab: toggles token/detail columns or edits model width
 - Appearance tab: opens a flag picker, cycles color mode, edits lightness, and toggles accent line or themed bars
 - Keybindings tab: select an action, `Enter` captures a replacement key, `a` captures an additional key, and `x` resets the selected action to its default
-- Misc tab: `Enter` cycles the prediction algorithm or edits auto refresh seconds
+- Misc tab: `Enter` cycles the prediction algorithm, edits auto refresh seconds, or shows About
 - Flag picker: `h` / `j` / `k` / `l` moves between flags, `n` / `p` changes page, `Enter` chooses
 - `s`: save settings
 - `q` / `Esc`: cancel settings changes

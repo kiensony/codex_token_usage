@@ -22,6 +22,7 @@ KEYBINDING_ACTIONS = (
     "shift_date_forward",
     "reload",
     "open_settings",
+    "open_about",
     "filter",
     "help",
     "back",
@@ -47,6 +48,7 @@ KEYBINDING_ACTION_LABELS = {
     "shift_date_forward": "Shift date range forward",
     "reload": "Reload data",
     "open_settings": "Open settings",
+    "open_about": "Open about",
     "filter": "Filter sessions",
     "help": "Open help",
     "back": "Back from details",
@@ -67,11 +69,12 @@ DEFAULT_KEYBINDINGS: dict[str, tuple[str, ...]] = {
     "cycle_sort": ("s",),
     "toggle_sort_direction": ("S",),
     "cycle_date_preset": ("d",),
-    "show_all_time": ("a",),
+    "show_all_time": ("A",),
     "shift_date_backward": ("[",),
     "shift_date_forward": ("]",),
     "reload": ("r",),
     "open_settings": ("c",),
+    "open_about": ("a",),
     "filter": ("/",),
     "help": ("?",),
     "back": ("Backspace",),
@@ -139,7 +142,14 @@ def parse_keybindings_config(raw: object) -> KeybindingConfig:
     for action, raw_labels in raw_keybindings.items():
         if action not in DEFAULT_KEYBINDINGS:
             raise ValueError(f"unknown keybinding action: {action}")
-        bindings[str(action)] = parse_keybinding_value(raw_labels, action)
+        parsed_labels = parse_keybinding_value(raw_labels, action)
+        if (
+            action == "show_all_time"
+            and parsed_labels == ("a",)
+            and "open_about" not in raw_keybindings
+        ):
+            parsed_labels = DEFAULT_KEYBINDINGS["show_all_time"]
+        bindings[str(action)] = parsed_labels
     return make_keybinding_config(bindings)
 
 

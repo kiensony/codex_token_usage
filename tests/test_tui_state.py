@@ -14,11 +14,13 @@ from codex_token_usage.models import (
     UsageDataset,
 )
 from codex_token_usage.pricing import ModelPrice
-from codex_token_usage.theme import ThemeConfig, themed_bar_segments
+from codex_token_usage.theme import PRESET_NAMES, ThemeConfig, themed_bar_segments
 from codex_token_usage.tui import (
+    ABOUT_DESCRIPTION,
     CursesUi,
     TuiOptions,
     TuiState,
+    about_content_lines,
     appearance_preview_block_height,
     appearance_setting_label,
     auto_refresh_label,
@@ -31,12 +33,16 @@ from codex_token_usage.tui import (
     flag_picker_visible_rows,
     flag_display_name,
     forecast_key_values,
+    misc_setting_label,
     prediction_algorithm_label,
     prediction_key_values,
     parse_settings_auto_refresh_seconds,
     parse_settings_lightness,
     parse_settings_model_width,
     parse_settings_rate,
+    pride_community_message,
+    pride_message_for_preset,
+    pride_messages_for_presets,
     settings_model_names,
     settings_price_source,
     settings_rate_text,
@@ -189,6 +195,25 @@ class TuiStateTests(unittest.TestCase):
         state = state.cancel_filter()
         self.assertEqual(state.status, "filter canceled")
 
+    def test_about_state_and_keybinding(self) -> None:
+        state = TuiState(dataset=dataset())
+
+        state = state.open_about()
+        self.assertTrue(state.about_open)
+        self.assertFalse(state.help_open)
+        state = state.close_about()
+        self.assertFalse(state.about_open)
+
+        ui = CursesUi(
+            FakeStdScr([]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        ui.handle_key(ord("a"))
+        self.assertTrue(ui.state.about_open)
+        ui.handle_key(27)
+        self.assertFalse(ui.state.about_open)
+
     def test_details_back_navigation_and_reload_preserves_selection(self) -> None:
         state = TuiState(dataset=dataset(extra=True), today=date(2026, 6, 29))
         state = state.move_selection(1)
@@ -210,6 +235,14 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(truncate("abcdef", 4), "abc~")
         self.assertEqual(CursesUi.session_model_width(160), 24)
         self.assertEqual(CursesUi.session_model_width(160, configured_width=12), 12)
+
+    def test_safe_addstr_uses_full_available_width(self) -> None:
+        stdscr = FakeStdScr([], size=(4, 5))
+        ui = CursesUi(stdscr, TuiState(dataset=dataset()), TuiOptions(codex_home=Path("/tmp")))
+
+        ui.safe_addstr(0, 0, "abcde")
+
+        self.assertEqual(stdscr.writes[-1][2], "abcde")
 
     def test_curses_ui_uses_default_and_custom_keybindings(self) -> None:
         state = TuiState(dataset=dataset())
@@ -266,6 +299,7 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(settings_rate_text(custom["custom-model"], "cached"), "0.1")
         self.assertEqual(display_setting_label("estimated_cost"), "estimated cost")
         self.assertEqual(appearance_setting_label("themed_bars"), "themed usage bars")
+        self.assertEqual(misc_setting_label("about"), "about")
         self.assertEqual(prediction_algorithm_label("recent_rate"), "recent rate")
         self.assertEqual(auto_refresh_label(None), "off")
         self.assertEqual(auto_refresh_label(1), "1 second")
@@ -343,6 +377,30 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(theme_current_preset_label(theme), "rainbow (plain)")
         self.assertEqual(theme_current_preset(ThemeConfig(preset="")), "femboy")
         self.assertEqual(flag_display_name("trans"), "transgender")
+        self.assertEqual(
+            pride_community_message(ThemeConfig(enabled=True, preset="trans")),
+            "Pride: transgender community, you belong here; be yourself and be proud to be there.",
+        )
+        about_lines = about_content_lines(ThemeConfig(enabled=True, preset="trans"), 34)
+        joined_about = " ".join(about_lines)
+        self.assertIn(ABOUT_DESCRIPTION, joined_about)
+        self.assertIn("transgender community", joined_about)
+        self.assertTrue(all(len(line) <= 34 for line in about_lines))
+        self.assertEqual(
+            pride_message_for_preset("all"),
+            "Pride: every community in this app belongs here; be yourself and be proud to be there.",
+        )
+        self.assertEqual(
+            pride_messages_for_presets(("trans",)),
+            (
+                "Pride: transgender community, you belong here; be yourself and be proud to be there.",
+            ),
+        )
+        for preset in PRESET_NAMES:
+            message = pride_message_for_preset(preset)
+            self.assertIn("Pride:", message)
+            if preset != "all":
+                self.assertIn(flag_display_name(preset), message)
         theme = cycle_theme_preset(theme)
         self.assertTrue(theme.enabled)
         self.assertEqual(theme.preset, "rainbow")
@@ -443,11 +501,13 @@ def session(
 
 
 class FakeStdScr:
-    def __init__(self, keys: list[int]) -> None:
+    def __init__(self, keys: list[int], size: tuple[int, int] = (24, 80)) -> None:
         self.keys = keys
+        self.size = size
+        self.writes: list[tuple[int, int, str, int]] = []
 
     def getmaxyx(self) -> tuple[int, int]:
-        return (24, 80)
+        return self.size
 
     def move(self, _y: int, _x: int) -> None:
         return None
@@ -455,7 +515,10 @@ class FakeStdScr:
     def clrtoeol(self) -> None:
         return None
 
-    def addstr(self, _y: int, _x: int, _text: str, _attr: int = 0) -> None:
+    def addstr(self, y: int, x: int, text: str, attr: int = 0) -> None:
+        self.writes.append((y, x, text, attr))
+
+    def refresh(self) -> None:
         return None
 
     def getch(self) -> int:
