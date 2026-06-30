@@ -12,6 +12,7 @@ codex-token-usage --format table --group-by date
 codex-token-usage --format graph --group-by week --since 2026-06-01
 codex-token-usage --format json --group-by session --since 2026-06-01
 codex-token-usage --format csv --group-by model --top 10
+codex-token-usage --format table --group-by project
 codex-token-usage --setup
 codex-token-usage --format graph --theme all --color always
 codex-token-usage --five-hour-token-limit 100000 --weekly-token-limit 2000000
@@ -24,7 +25,7 @@ Options:
 - `--since YYYY-MM-DD`
 - `--until YYYY-MM-DD`
 - `--format table|json|csv|graph`
-- `--group-by date|week|month|hour|session|model|cwd` (`day` is also accepted as an alias for `date`)
+- `--group-by date|week|month|hour|session|model|project|folder|cwd` (`day` is also accepted as an alias for `date`; `folder` is an alias for `project`)
 - `--top N`
 - `--include-zero`
 - `--five-hour-token-limit TOKENS`: one-run rolling 5-hour warning limit; `0` disables
@@ -38,6 +39,8 @@ The `--setup` wizard controls the theme, optional display columns, custom model 
 Inside the TUI, `c` opens a curses settings screen for theme, display columns, model column width, model rates, prediction algorithm, and main TUI keybindings without leaving the app.
 Available presets are loaded from HyFetch's preset table, including `rainbow`, `transgender`, `nonbinary`, `abrosexual`, `aromantic`, `intersex`, `progress`, `baker`, `band`, and many more. Compatibility aliases include `trans`, `nonhuman-unit`, and `ynullflux`.
 The TUI applies the selected flag palette to global chrome, headings, selected rows, and usage bars when curses reports color support. Table, JSON, and CSV output stay uncolored.
+
+Project/folder usage groups sessions by their exact recorded working directory (`cwd`). Existing `cwd` reports remain available for compatibility, and the TUI includes a `By Project` tab with the same aggregate columns and sorting controls as the date, week, month, and hour views.
 
 Display settings can show or hide cached tokens, cached %, estimated API cost, reasoning level, cache miss, reasoning tokens, model, and cwd/title columns, and set the session table model column width to `auto` or a fixed 8-40 character width. Appearance settings can change the flag palette with a paged flag picker, color mode, lightness, accent line, and themed usage bars. Estimated cost uses standard OpenAI per-1M-token rates for known models, with any custom rates from setup overriding the built-in table. Unknown models show `n/a`; mixed aggregates with some unknown model rates are marked with `*`.
 

@@ -144,7 +144,7 @@ def group_key(session: SessionUsage, group_by: str) -> str:
         return session.activity_at.strftime("%Y-%m-%d %H:00")
     if group_by == "model":
         return session.model
-    if group_by == "cwd":
+    if group_by in {"cwd", "project"}:
         return session.cwd
     raise ValueError(f"unsupported group_by: {group_by}")
 
@@ -638,4 +638,6 @@ def is_formatted_number(value: str) -> bool:
 def canonical_group_by(group_by: str) -> str:
     if group_by == "day":
         return "date"
+    if group_by == "folder":
+        return "project"
     return group_by

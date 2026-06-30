@@ -53,14 +53,32 @@ from .theme import (
     themed_bar_segments,
 )
 
-VIEWS = ("overview", "daily", "weekly", "monthly", "hourly", "sessions", "details")
-TAB_VIEWS = ("overview", "daily", "weekly", "monthly", "hourly", "sessions")
+VIEWS = (
+    "overview",
+    "daily",
+    "weekly",
+    "monthly",
+    "hourly",
+    "projects",
+    "sessions",
+    "details",
+)
+TAB_VIEWS = (
+    "overview",
+    "daily",
+    "weekly",
+    "monthly",
+    "hourly",
+    "projects",
+    "sessions",
+)
 VIEW_LABELS = {
     "overview": "Overview",
     "daily": "By Date",
     "weekly": "By Week",
     "monthly": "By Month",
     "hourly": "By Hour",
+    "projects": "By Project",
     "sessions": "By Session",
     "details": "Details",
 }
@@ -365,6 +383,12 @@ class TuiState:
         dataset = replace(self.dataset, sessions=tuple(self.visible_sessions()))
         return self.sorted_report_rows(
             make_report_rows(dataset, group_by="hour", pricing=self.pricing)
+        )
+
+    def project_rows(self):
+        dataset = replace(self.dataset, sessions=tuple(self.visible_sessions()))
+        return self.sorted_report_rows(
+            make_report_rows(dataset, group_by="project", pricing=self.pricing)
         )
 
     def filtered_totals(self) -> TokenBreakdown:
@@ -1742,6 +1766,8 @@ class CursesUi:
             self.render_monthly(height, width)
         elif self.state.view == "hourly":
             self.render_hourly(height, width)
+        elif self.state.view == "projects":
+            self.render_projects(height, width)
         elif self.state.view == "sessions":
             self.render_sessions(height, width)
         elif self.state.view == "details":
@@ -1863,6 +1889,18 @@ class CursesUi:
         rows = self.state.hourly_rows()
         self.render_usage_rows("hour", rows, height, width)
 
+    def render_projects(self, height: int, width: int) -> None:
+        rows = self.state.project_rows()
+        max_label = max((len(row.key) for row in rows), default=len("project"))
+        label_width = min(max(16, max_label), max(16, width // 3))
+        self.render_usage_rows(
+            "project",
+            rows,
+            height,
+            width,
+            label_width=label_width,
+        )
+
     def aggregate_header_fields(self) -> str:
         fields: list[tuple[str, int]] = [
             ("sessions", 8),
@@ -1958,17 +1996,19 @@ class CursesUi:
         height: int,
         width: int,
         forecast_window: ForecastWindow | None = None,
+        label_width: int = 16,
     ) -> None:
         max_total = max((row.tokens.total_tokens for row in rows), default=0)
         header = (
-            f"{label:<16} {'usage':<14} "
+            f"{label:<{label_width}} {'usage':<14} "
             f"{self.aggregate_header_fields()}"
         )
         if forecast_window and forecast_window.enabled and label == "week":
             header += " forecast"
         self.render_themed_text(4, 0, header[: max(0, width - 1)], curses.A_BOLD)
         for offset, row in enumerate(rows[: max(0, height - 7)], start=5):
-            prefix = f"{row.key:<16} "
+            row_key = truncate(row.key, label_width)
+            prefix = f"{row_key:<{label_width}} "
             suffix = " " + self.aggregate_value_fields(row)
             status = usage_row_forecast_status(label, row.key, forecast_window)
             if status:

@@ -33,8 +33,8 @@ class CliParserTests(unittest.TestCase):
 
         self.assertEqual(args.theme, "all")
 
-    def test_week_and_month_grouping_parse(self) -> None:
-        for group_by in ("week", "month"):
+    def test_report_groupings_parse(self) -> None:
+        for group_by in ("week", "month", "project", "folder"):
             with self.subTest(group_by=group_by):
                 args = build_parser().parse_args(["--group-by", group_by])
                 self.assertEqual(args.group_by, group_by)

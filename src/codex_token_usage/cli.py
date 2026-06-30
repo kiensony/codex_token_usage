@@ -70,11 +70,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--group-by",
-        choices=("date", "week", "month", "hour", "session", "day", "model", "cwd"),
+        choices=(
+            "date",
+            "week",
+            "month",
+            "hour",
+            "session",
+            "day",
+            "model",
+            "cwd",
+            "project",
+            "folder",
+        ),
         default="date",
         help=(
             "Report grouping for non-interactive output. "
-            "'day' is an alias for 'date'."
+            "'day' is an alias for 'date'; 'folder' is an alias for 'project'."
         ),
     )
     parser.add_argument(

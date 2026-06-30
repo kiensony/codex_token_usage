@@ -74,6 +74,10 @@ class TuiStateTests(unittest.TestCase):
         )
 
         state = state.next_view()
+        self.assertEqual(state.view, "projects")
+        self.assertEqual([row.key for row in state.project_rows()], ["/other", "/repo"])
+
+        state = state.next_view()
         self.assertEqual(state.view, "sessions")
         self.assertEqual(state.selected_session().session_id, "beta")
         state = state.move_selection(1)

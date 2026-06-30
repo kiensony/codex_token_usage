@@ -46,6 +46,51 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(model_rows[0].key, "gpt-5")
         self.assertEqual(model_rows[0].tokens.total_tokens, 3000)
 
+    def test_group_by_project_uses_exact_cwd_and_folder_alias(self) -> None:
+        root = Path("/tmp")
+        dataset = UsageDataset(
+            sessions=(
+                session(
+                    "s1",
+                    1000,
+                    "2026-06-01T00:00:00+00:00",
+                    root,
+                    cwd="/work/app",
+                ),
+                session(
+                    "s2",
+                    2000,
+                    "2026-06-02T00:00:00+00:00",
+                    root,
+                    cwd="/work/app",
+                ),
+                session(
+                    "s3",
+                    1500,
+                    "2026-06-03T00:00:00+00:00",
+                    root,
+                    cwd="/other/app",
+                ),
+            ),
+            codex_home=root,
+            loaded_at=datetime.now(timezone.utc),
+            sqlite_available=False,
+        )
+
+        project_rows = make_report_rows(dataset, group_by="project")
+        folder_rows = make_report_rows(dataset, group_by="folder")
+
+        self.assertEqual(
+            [row.key for row in project_rows],
+            ["/work/app", "/other/app"],
+        )
+        self.assertEqual(project_rows[0].sessions, 2)
+        self.assertEqual(project_rows[0].tokens.total_tokens, 3000)
+        self.assertEqual(
+            [row.key for row in folder_rows],
+            [row.key for row in project_rows],
+        )
+
     def test_table_json_csv_and_graph_output(self) -> None:
         dataset = sample_dataset()
 
@@ -201,7 +246,11 @@ def sample_dataset() -> UsageDataset:
 
 
 def session(
-    session_id: str, total: int, updated_at: str, root: Path
+    session_id: str,
+    total: int,
+    updated_at: str,
+    root: Path,
+    cwd: str = "/repo",
 ) -> SessionUsage:
     updated = datetime.fromisoformat(updated_at)
     return SessionUsage(
@@ -218,7 +267,7 @@ def session(
             session_id=session_id,
             title=f"title {session_id}",
             model="gpt-5",
-            cwd="/repo",
+            cwd=cwd,
             created_at=updated,
             updated_at=updated,
         ),
