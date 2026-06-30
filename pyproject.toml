@@ -17,4 +17,4 @@ codex-token-usage = "codex_token_usage.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-codex_token_usage = ["flag_presets.json"]
+"codex_token_usage.theme" = ["flag_presets.json"]

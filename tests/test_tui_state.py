@@ -309,6 +309,17 @@ class TuiStateTests(unittest.TestCase):
         ui.handle_key(ord("n"))
         self.assertEqual(ui.state.view, "daily")
 
+    def test_c_key_opens_settings_without_crashing(self) -> None:
+        ui = CursesUi(
+            FakeStdScr([ord("q")]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        ui.handle_key(ord("c"))
+
+        self.assertEqual(ui.state.status, "settings canceled")
+
     def test_curses_ui_captures_keybindings(self) -> None:
         ui = CursesUi(
             FakeStdScr([ord("n"), ord("m")]),
