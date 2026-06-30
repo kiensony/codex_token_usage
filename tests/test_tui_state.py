@@ -5,6 +5,7 @@ import unittest
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from codex_token_usage.forecast import LimitConfig, PredictionConfig, make_usage_forecast
 from codex_token_usage.keybindings import KeybindingConfig, update_keybinding
 from codex_token_usage.models import (
     SessionMetadata,
@@ -20,6 +21,7 @@ from codex_token_usage.tui import (
     TuiState,
     appearance_preview_block_height,
     appearance_setting_label,
+    cycle_prediction_algorithm,
     cycle_theme_color_mode,
     cycle_theme_preset,
     display_setting_label,
@@ -27,6 +29,9 @@ from codex_token_usage.tui import (
     flag_picker_page_size,
     flag_picker_visible_rows,
     flag_display_name,
+    forecast_key_values,
+    prediction_algorithm_label,
+    prediction_key_values,
     parse_settings_lightness,
     parse_settings_model_width,
     parse_settings_rate,
@@ -255,9 +260,41 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(settings_rate_text(custom["custom-model"], "cached"), "0.1")
         self.assertEqual(display_setting_label("estimated_cost"), "estimated cost")
         self.assertEqual(appearance_setting_label("themed_bars"), "themed usage bars")
+        self.assertEqual(prediction_algorithm_label("recent_rate"), "recent rate")
         self.assertEqual(parse_settings_rate("1.25"), 1.25)
         self.assertEqual(parse_settings_model_width("auto"), None)
         self.assertEqual(parse_settings_model_width("18"), 18)
+
+    def test_forecast_key_values(self) -> None:
+        forecast = make_usage_forecast(
+            dataset(),
+            LimitConfig(five_hour_tokens=50, weekly_tokens=100),
+            as_of=datetime.fromisoformat("2026-06-02T01:00:00+00:00"),
+        )
+
+        rows = forecast_key_values(forecast)
+
+        self.assertEqual(rows[0][0], "5h forecast")
+        self.assertIn("used 20 / 50", rows[0][1])
+        self.assertEqual(rows[1][0], "Weekly forecast")
+        self.assertIn("projected", rows[1][1])
+
+        prediction_rows = prediction_key_values(forecast)
+        self.assertEqual(prediction_rows[0][0], "Next 5h estimate")
+        self.assertIn("tokens", prediction_rows[0][1])
+
+    def test_prediction_algorithm_cycles_from_misc_setting(self) -> None:
+        prediction = cycle_prediction_algorithm(PredictionConfig())
+        self.assertEqual(prediction.algorithm, "previous_period")
+
+        ui = CursesUi(None, TuiState(dataset=dataset()), TuiOptions(codex_home=Path("/tmp")))
+        prediction, status = ui.apply_misc_setting(
+            PredictionConfig(),
+            "prediction_algorithm",
+        )
+
+        self.assertEqual(prediction.algorithm, "previous_period")
+        self.assertEqual(status, "prediction algorithm: previous period")
 
     def test_settings_theme_helpers(self) -> None:
         theme = ThemeConfig(enabled=False, preset="rainbow", color_mode="8bit")

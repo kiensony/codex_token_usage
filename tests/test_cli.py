@@ -39,6 +39,18 @@ class CliParserTests(unittest.TestCase):
                 args = build_parser().parse_args(["--group-by", group_by])
                 self.assertEqual(args.group_by, group_by)
 
+    def test_token_limit_overrides_parse(self) -> None:
+        args = build_parser().parse_args(
+            ["--five-hour-token-limit", "100000", "--weekly-token-limit", "2000000"]
+        )
+
+        self.assertEqual(args.five_hour_token_limit, 100000)
+        self.assertEqual(args.weekly_token_limit, 2000000)
+
+    def test_negative_token_limit_rejected(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            build_parser().parse_args(["--weekly-token-limit", "-1"])
+
     def test_invalid_lightness_rejected(self) -> None:
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             build_parser().parse_args(["--lightness", "1.1"])

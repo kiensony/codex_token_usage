@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from codex_token_usage.forecast import LimitConfig, PredictionConfig
 from codex_token_usage.keybindings import KeybindingConfig, update_keybinding
 from codex_token_usage.pricing import ModelPrice, PricingConfig
 from codex_token_usage.theme import (
@@ -98,6 +99,80 @@ class ThemeConfigTests(unittest.TestCase):
         self.assertEqual(result.keybindings.labels("next_view"), ("n",))
         self.assertEqual(result.keybindings.labels("move_down"), ("Down", "j"))
         self.assertEqual(result.status, "")
+
+    def test_save_and_load_limit_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            limits = LimitConfig(five_hour_tokens=100_000, weekly_tokens=1_000_000)
+
+            save_theme_config(ThemeConfig(), path, limits=limits)
+            result = load_theme_config(path)
+
+        self.assertEqual(result.limits, limits)
+        self.assertEqual(result.status, "")
+
+    def test_save_and_load_prediction_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            prediction = PredictionConfig(algorithm="previous_period")
+
+            save_theme_config(ThemeConfig(), path, prediction=prediction)
+            result = load_theme_config(path)
+
+        self.assertEqual(result.prediction, prediction)
+        self.assertEqual(result.status, "")
+
+    def test_invalid_limit_falls_back_with_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "theme": {
+                            "enabled": False,
+                            "preset": "femboy",
+                            "color_mode": "8bit",
+                            "lightness": 1,
+                        },
+                        "limits": {
+                            "five_hour_tokens": -1,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = load_theme_config(path)
+
+        self.assertEqual(result.limits, LimitConfig())
+        self.assertIn("limits.five_hour_tokens", result.status)
+
+    def test_invalid_prediction_algorithm_falls_back_with_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "theme": {
+                            "enabled": False,
+                            "preset": "femboy",
+                            "color_mode": "8bit",
+                            "lightness": 1,
+                        },
+                        "prediction": {
+                            "algorithm": "unknown",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = load_theme_config(path)
+
+        self.assertEqual(result.prediction, PredictionConfig())
+        self.assertIn("prediction.algorithm", result.status)
 
     def test_invalid_json_falls_back_to_plain_with_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

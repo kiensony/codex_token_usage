@@ -87,6 +87,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Include sessions with no token_count event or zero tokens.",
     )
+    parser.add_argument(
+        "--five-hour-token-limit",
+        type=parse_token_limit_arg,
+        help=(
+            "Override the rolling 5-hour token limit for forecast warnings. "
+            "Use 0 to disable."
+        ),
+    )
+    parser.add_argument(
+        "--weekly-token-limit",
+        type=parse_token_limit_arg,
+        help=(
+            "Override the weekly token limit for forecast warnings. "
+            "Use 0 to disable."
+        ),
+    )
     return parser
 
 
@@ -95,6 +111,16 @@ def parse_lightness_arg(value: str) -> float:
         return parse_lightness(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def parse_token_limit_arg(value: str) -> int:
+    try:
+        limit = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("token limit must be a whole number") from exc
+    if limit < 0:
+        raise argparse.ArgumentTypeError("token limit must not be negative")
+    return limit
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -112,6 +138,10 @@ def main(argv: list[str] | None = None) -> int:
         theme_result.config,
         preset=args.theme,
         lightness=args.lightness,
+    )
+    limits = theme_result.limits.with_overrides(
+        five_hour_tokens=args.five_hour_token_limit,
+        weekly_tokens=args.weekly_token_limit,
     )
 
     if args.format:
@@ -132,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
                     args.format == "graph"
                     and should_use_ansi_color(args.color, sys.stdout)
                 ),
+                limits=limits,
+                prediction=theme_result.prediction,
             )
         )
         return 0
@@ -147,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
             pricing=theme_result.pricing,
             keybindings=theme_result.keybindings,
             theme_status=theme_result.status,
+            limits=limits,
+            prediction=theme_result.prediction,
         )
     )
 

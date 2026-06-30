@@ -8,6 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Callable, TextIO
 
+from .forecast import PREDICTION_ALGORITHMS, LimitConfig, PredictionConfig
 from .keybindings import KeybindingConfig, parse_keybindings_config
 from .pricing import MODEL_PRICES, ModelPrice, PricingConfig, normalize_model_name
 
@@ -224,6 +225,8 @@ class ThemeLoadResult:
     display: DisplayConfig = DisplayConfig()
     pricing: PricingConfig = PricingConfig()
     keybindings: KeybindingConfig = KeybindingConfig()
+    limits: LimitConfig = LimitConfig()
+    prediction: PredictionConfig = PredictionConfig()
 
 
 @dataclass(frozen=True)
@@ -252,6 +255,8 @@ def load_theme_config(path: Path | None = None) -> ThemeLoadResult:
         config = parse_theme_config(raw)
         display = parse_display_config(raw)
         pricing = parse_pricing_config(raw)
+        limits = parse_limit_config(raw)
+        prediction = parse_prediction_config(raw)
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         return ThemeLoadResult(
             config=ThemeConfig(),
@@ -271,6 +276,8 @@ def load_theme_config(path: Path | None = None) -> ThemeLoadResult:
         display=display,
         pricing=pricing,
         keybindings=keybindings,
+        limits=limits,
+        prediction=prediction,
     )
 
 
@@ -368,18 +375,57 @@ def parse_pricing_config(raw: object) -> PricingConfig:
     return PricingConfig(model_prices=tuple(sorted(model_prices)))
 
 
+def parse_limit_config(raw: object) -> LimitConfig:
+    if not isinstance(raw, dict):
+        raise ValueError("config must be a JSON object")
+
+    limits = raw.get("limits", {})
+    if not isinstance(limits, dict):
+        raise ValueError("limits must be a JSON object")
+
+    return LimitConfig(
+        five_hour_tokens=parse_token_limit(
+            limits.get("five_hour_tokens"),
+            "limits.five_hour_tokens",
+        ),
+        weekly_tokens=parse_token_limit(
+            limits.get("weekly_tokens"),
+            "limits.weekly_tokens",
+        ),
+    )
+
+
+def parse_prediction_config(raw: object) -> PredictionConfig:
+    if not isinstance(raw, dict):
+        raise ValueError("config must be a JSON object")
+
+    prediction = raw.get("prediction", {})
+    if not isinstance(prediction, dict):
+        raise ValueError("prediction must be a JSON object")
+
+    algorithm = str(prediction.get("algorithm") or "recent_rate")
+    if algorithm not in PREDICTION_ALGORITHMS:
+        choices = ", ".join(PREDICTION_ALGORITHMS)
+        raise ValueError(f"prediction.algorithm must be one of: {choices}")
+    return PredictionConfig(algorithm=algorithm)
+
+
 def save_theme_config(
     config: ThemeConfig,
     path: Path | None = None,
     display: DisplayConfig | None = None,
     pricing: PricingConfig | None = None,
     keybindings: KeybindingConfig | None = None,
+    limits: LimitConfig | None = None,
+    prediction: PredictionConfig | None = None,
 ) -> Path:
     config_path = path or default_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
     display_config = display or DisplayConfig()
     pricing_config = pricing or PricingConfig()
     keybinding_config = keybindings or KeybindingConfig()
+    limit_config = limits or LimitConfig()
+    prediction_config = prediction or PredictionConfig()
     payload = {
         "version": CONFIG_VERSION,
         "theme": {
@@ -410,6 +456,13 @@ def save_theme_config(
                 }
                 for model, price in pricing_config.model_prices
             },
+        },
+        "limits": {
+            "five_hour_tokens": limit_config.five_hour_tokens,
+            "weekly_tokens": limit_config.weekly_tokens,
+        },
+        "prediction": {
+            "algorithm": prediction_config.algorithm,
         },
         "keybindings": {
             action: list(labels)
@@ -476,6 +529,28 @@ def parse_rate(value: object, name: str) -> float:
     if rate < 0:
         raise ValueError(f"{name} must not be negative")
     return rate
+
+
+def parse_token_limit(value: object, name: str = "token limit") -> int | None:
+    if isinstance(value, str):
+        value = value.strip()
+        if value.lower() in ("", "-", "none"):
+            return None
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a whole number")
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError(f"{name} must be a whole number")
+    try:
+        limit = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a whole number") from exc
+    if limit < 0:
+        raise ValueError(f"{name} must not be negative")
+    if limit == 0:
+        return None
+    return limit
 
 
 def parse_model_column_width(value: object) -> int | None:
@@ -680,6 +755,8 @@ def run_setup_wizard(
     current_display = result.display
     current_pricing = result.pricing
     current_keybindings = result.keybindings
+    current_limits = result.limits
+    current_prediction = result.prediction
 
     def write(line: str = "") -> None:
         output.write(line + "\n")
@@ -753,6 +830,8 @@ def run_setup_wizard(
             ),
         )
         next_pricing = prompt_pricing_config(current_pricing, input_fn, write)
+        next_limits = prompt_limit_config(current_limits, input_fn, write)
+        next_prediction = prompt_prediction_config(current_prediction, input_fn, write)
 
         answer = input_fn("Save this config? [Y/n]: ").strip().lower()
     except (EOFError, KeyboardInterrupt, ValueError) as exc:
@@ -769,6 +848,8 @@ def run_setup_wizard(
         display=next_display,
         pricing=next_pricing,
         keybindings=current_keybindings,
+        limits=next_limits,
+        prediction=next_prediction,
     )
     write(f"saved {saved}")
     return 0
@@ -873,6 +954,64 @@ def prompt_pricing_config(
         write(f"saved rate for {model}")
 
     return PricingConfig(model_prices=tuple(sorted(custom_prices.items())))
+
+
+def prompt_limit_config(
+    current: LimitConfig,
+    input_fn: Callable[[str], str],
+    write: Callable[[str], None],
+) -> LimitConfig:
+    write("")
+    write("Token limits:")
+    write("  Blank or 0 disables a limit.")
+    return LimitConfig(
+        five_hour_tokens=prompt_token_limit(
+            "Rolling 5-hour token limit",
+            current.five_hour_tokens,
+            input_fn,
+            write,
+        ),
+        weekly_tokens=prompt_token_limit(
+            "Weekly token limit",
+            current.weekly_tokens,
+            input_fn,
+            write,
+        ),
+    )
+
+
+def prompt_prediction_config(
+    current: PredictionConfig,
+    input_fn: Callable[[str], str],
+    write: Callable[[str], None],
+) -> PredictionConfig:
+    write("")
+    write("Prediction:")
+    algorithm = prompt_choice(
+        "Prediction algorithm",
+        PREDICTION_ALGORITHMS,
+        current.algorithm,
+        input_fn,
+        write,
+    )
+    return PredictionConfig(algorithm=algorithm)
+
+
+def prompt_token_limit(
+    title: str,
+    default: int | None,
+    input_fn: Callable[[str], str],
+    write: Callable[[str], None],
+) -> int | None:
+    default_text = "disabled" if default is None else str(default)
+    while True:
+        raw = input_fn(f"{title} [{default_text}]: ").strip()
+        if not raw:
+            return default
+        try:
+            return parse_token_limit(raw, title)
+        except ValueError as exc:
+            write(str(exc))
 
 
 def prompt_rate(

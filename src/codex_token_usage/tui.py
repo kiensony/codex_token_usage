@@ -6,6 +6,14 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Callable
 
+from .forecast import (
+    PREDICTION_ALGORITHMS,
+    ForecastWindow,
+    LimitConfig,
+    PredictionConfig,
+    UsageForecast,
+    make_usage_forecast,
+)
 from .keybindings import (
     KEYBINDING_ACTION_LABELS,
     KEYBINDING_ACTIONS,
@@ -86,7 +94,13 @@ FLAG_PICKER_COLUMNS = 4
 FLAG_PICKER_TOP = 5
 FLAG_PICKER_PREVIEW_HEIGHT = 5
 APPEARANCE_PREVIEW_BLOCK_HEIGHT = 5
-SETTINGS_TABS = ("Model Pricing", "Display Columns", "Appearance", "Keybindings")
+SETTINGS_TABS = (
+    "Model Pricing",
+    "Display Columns",
+    "Appearance",
+    "Keybindings",
+    "Misc",
+)
 DISPLAY_SETTING_FIELDS = (
     "cached_tokens",
     "cached_percent",
@@ -105,6 +119,7 @@ APPEARANCE_SETTING_FIELDS = (
     "accent_line",
     "themed_bars",
 )
+MISC_SETTING_FIELDS = ("prediction_algorithm",)
 
 
 @dataclass(frozen=True)
@@ -118,6 +133,8 @@ class TuiOptions:
     pricing: PricingConfig = PricingConfig()
     keybindings: KeybindingConfig = KeybindingConfig()
     theme_status: str = ""
+    limits: LimitConfig = LimitConfig()
+    prediction: PredictionConfig = PredictionConfig()
 
 
 @dataclass(frozen=True)
@@ -453,6 +470,68 @@ def report_row_sort_key(row: ReportRow, sort_field: str):
     return row.key.casefold()
 
 
+def forecast_key_values(forecast: UsageForecast) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    for window in (forecast.five_hour, forecast.weekly):
+        if window.enabled:
+            rows.append((forecast_label(window), format_forecast_window(window)))
+    return rows
+
+
+def prediction_key_values(forecast: UsageForecast) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    for prediction in forecast.predictions:
+        rows.append(
+            (
+                prediction_overview_label(prediction.name),
+                f"{format_int(prediction.projected)} tokens",
+            )
+        )
+    return rows
+
+
+def prediction_overview_label(name: str) -> str:
+    labels = {
+        "next_5_hours": "Next 5h estimate",
+        "next_day": "Next day estimate",
+        "next_week": "Next week estimate",
+        "next_month": "Next month estimate",
+    }
+    return labels.get(name, name.replace("_", " ").title())
+
+
+def forecast_label(window: ForecastWindow) -> str:
+    if window.name == "5h":
+        return "5h forecast"
+    return "Weekly forecast"
+
+
+def format_forecast_window(window: ForecastWindow) -> str:
+    remaining = "-" if window.remaining is None else format_int(window.remaining)
+    limit = "-" if window.limit is None else format_int(window.limit)
+    return (
+        f"{window.status}; used {format_int(window.used)} / {limit}; "
+        f"remaining {remaining}; projected {format_int(window.projected)}"
+    )
+
+
+def usage_row_forecast_status(
+    label: str,
+    row_key: str,
+    forecast_window: ForecastWindow | None,
+) -> str:
+    if label != "week" or forecast_window is None or not forecast_window.enabled:
+        return ""
+    if row_key != week_key(forecast_window.window_start.date()):
+        return ""
+    return forecast_window.status
+
+
+def week_key(value: date) -> str:
+    iso_week = value.isocalendar()
+    return f"{iso_week.year}-W{iso_week.week:02d}"
+
+
 def reasoning_level_sort_key(level: str) -> tuple[int, str]:
     normalized = level.casefold()
     return (REASONING_LEVEL_RANK.get(normalized, 0), normalized)
@@ -651,6 +730,7 @@ class CursesUi:
         display = self.options.display
         custom_prices = dict(self.options.pricing.model_prices)
         keybindings = self.options.keybindings
+        prediction = self.options.prediction
         model_names = settings_model_names(self.state.dataset, custom_prices)
         tab_index = 0
         model_index = 0
@@ -658,7 +738,8 @@ class CursesUi:
         display_field_index = 0
         appearance_field_index = 0
         keybinding_index = 0
-        status = "settings: press 1-4 for tabs, enter/e to edit selected item"
+        misc_field_index = 0
+        status = "settings: press 1-5 for tabs, enter/e to edit selected item"
 
         while True:
             model_names = settings_model_names(self.state.dataset, custom_prices)
@@ -677,6 +758,8 @@ class CursesUi:
                 appearance_field_index,
                 keybindings,
                 keybinding_index,
+                prediction,
+                misc_field_index,
                 status,
             )
             key = self.stdscr.getch()
@@ -696,6 +779,8 @@ class CursesUi:
                         display=display,
                         pricing=pricing,
                         keybindings=keybindings,
+                        limits=self.options.limits,
+                        prediction=prediction,
                     )
                 except OSError as exc:
                     status = f"settings save failed: {exc}"
@@ -707,6 +792,8 @@ class CursesUi:
                     display=loaded.display,
                     pricing=loaded.pricing,
                     keybindings=loaded.keybindings,
+                    limits=loaded.limits,
+                    prediction=loaded.prediction,
                     theme_status=loaded.status,
                 )
                 self.keymap = keymap_for_config(loaded.keybindings)
@@ -729,9 +816,12 @@ class CursesUi:
                 elif tab_index == 2:
                     appearance_field_index = (appearance_field_index - 1) % len(APPEARANCE_SETTING_FIELDS)
                     status = f"appearance: {appearance_setting_label(APPEARANCE_SETTING_FIELDS[appearance_field_index])}"
-                else:
+                elif tab_index == 3:
                     keybinding_index = (keybinding_index - 1) % len(KEYBINDING_ACTIONS)
                     status = f"keybinding: {keybinding_action_label(KEYBINDING_ACTIONS[keybinding_index])}"
+                else:
+                    misc_field_index = (misc_field_index - 1) % len(MISC_SETTING_FIELDS)
+                    status = f"misc: {misc_setting_label(MISC_SETTING_FIELDS[misc_field_index])}"
                 continue
             if key in (ord("l"), curses.KEY_RIGHT):
                 if tab_index == 0:
@@ -743,9 +833,12 @@ class CursesUi:
                 elif tab_index == 2:
                     appearance_field_index = (appearance_field_index + 1) % len(APPEARANCE_SETTING_FIELDS)
                     status = f"appearance: {appearance_setting_label(APPEARANCE_SETTING_FIELDS[appearance_field_index])}"
-                else:
+                elif tab_index == 3:
                     keybinding_index = (keybinding_index + 1) % len(KEYBINDING_ACTIONS)
                     status = f"keybinding: {keybinding_action_label(KEYBINDING_ACTIONS[keybinding_index])}"
+                else:
+                    misc_field_index = (misc_field_index + 1) % len(MISC_SETTING_FIELDS)
+                    status = f"misc: {misc_setting_label(MISC_SETTING_FIELDS[misc_field_index])}"
                 continue
             if key in (ord("j"), ord("n"), curses.KEY_DOWN):
                 if tab_index == 0:
@@ -757,9 +850,12 @@ class CursesUi:
                 elif tab_index == 2:
                     appearance_field_index = (appearance_field_index + 1) % len(APPEARANCE_SETTING_FIELDS)
                     status = f"appearance: {appearance_setting_label(APPEARANCE_SETTING_FIELDS[appearance_field_index])}"
-                else:
+                elif tab_index == 3:
                     keybinding_index = min(keybinding_index + 1, len(KEYBINDING_ACTIONS) - 1)
                     status = f"keybinding: {keybinding_action_label(KEYBINDING_ACTIONS[keybinding_index])}"
+                else:
+                    misc_field_index = (misc_field_index + 1) % len(MISC_SETTING_FIELDS)
+                    status = f"misc: {misc_setting_label(MISC_SETTING_FIELDS[misc_field_index])}"
                 continue
             if key in (ord("k"), ord("p"), curses.KEY_UP):
                 if tab_index == 0:
@@ -771,9 +867,12 @@ class CursesUi:
                 elif tab_index == 2:
                     appearance_field_index = (appearance_field_index - 1) % len(APPEARANCE_SETTING_FIELDS)
                     status = f"appearance: {appearance_setting_label(APPEARANCE_SETTING_FIELDS[appearance_field_index])}"
-                else:
+                elif tab_index == 3:
                     keybinding_index = max(keybinding_index - 1, 0)
                     status = f"keybinding: {keybinding_action_label(KEYBINDING_ACTIONS[keybinding_index])}"
+                else:
+                    misc_field_index = (misc_field_index - 1) % len(MISC_SETTING_FIELDS)
+                    status = f"misc: {misc_setting_label(MISC_SETTING_FIELDS[misc_field_index])}"
                 continue
             if key in (ord("a"),):
                 if tab_index == 3:
@@ -836,6 +935,12 @@ class CursesUi:
                         action,
                     )
                     continue
+                if tab_index == 4:
+                    prediction, status = self.apply_misc_setting(
+                        prediction,
+                        MISC_SETTING_FIELDS[misc_field_index],
+                    )
+                    continue
                 model = model_names[model_index]
                 price = custom_prices.get(model) or MODEL_PRICES.get(model)
                 if price is None:
@@ -866,6 +971,8 @@ class CursesUi:
         appearance_field_index: int,
         keybindings: KeybindingConfig,
         keybinding_index: int,
+        prediction: PredictionConfig,
+        misc_field_index: int,
         status: str,
     ) -> None:
         self.stdscr.erase()
@@ -884,6 +991,13 @@ class CursesUi:
                 width,
                 keybindings,
                 keybinding_index,
+            )
+        elif tab_index == 4:
+            self.render_misc_settings(
+                content_top,
+                width,
+                prediction,
+                misc_field_index,
             )
         else:
             self.render_model_pricing_settings(
@@ -904,7 +1018,7 @@ class CursesUi:
             start_index=1,
         )
         footer = (
-            "1-4 tabs  h/j/k/l select  enter/e edit  model: a add x reset  keys: a add x reset  "
+            "1-5 tabs  h/j/k/l select  enter/e edit  model: a add x reset  keys: a add x reset  "
             "s save  q cancel"
         )
         self.render_themed_text(
@@ -1035,6 +1149,36 @@ class CursesUi:
                 f"{marker} {label:<{action_width}} {keys}",
                 attr,
             )
+
+    def render_misc_settings(
+        self,
+        top: int,
+        width: int,
+        prediction: PredictionConfig,
+        selected_field: int,
+    ) -> None:
+        rows = [
+            (
+                "prediction_algorithm",
+                "Prediction algorithm",
+                prediction_algorithm_label(prediction.algorithm),
+            ),
+        ]
+        self.safe_addstr(top, 0, "Misc", self.accent_attr)
+        for index, (_, label, value) in enumerate(rows):
+            attr = curses.A_REVERSE if index == selected_field else 0
+            self.safe_addstr(
+                top + 2 + index,
+                0,
+                f"{'>' if index == selected_field else ' '} {label:<28} {value}",
+                attr,
+            )
+        self.safe_addstr(
+            top + 2 + len(rows) + 1,
+            0,
+            "Enter cycles prediction algorithms.",
+            curses.A_DIM,
+        )
 
     def render_theme_preview(
         self,
@@ -1227,6 +1371,19 @@ class CursesUi:
             return theme, parsed_lightness
         next_theme = replace(theme, lightness=parsed_lightness)
         return next_theme, f"theme lightness: {format_settings_rate(parsed_lightness)}"
+
+    def apply_misc_setting(
+        self,
+        prediction: PredictionConfig,
+        field: str,
+    ) -> tuple[PredictionConfig, str]:
+        if field == "prediction_algorithm":
+            next_prediction = cycle_prediction_algorithm(prediction)
+            return (
+                next_prediction,
+                f"prediction algorithm: {prediction_algorithm_label(next_prediction.algorithm)}",
+            )
+        return prediction, "unknown misc setting"
 
     def apply_keybinding_setting(
         self,
@@ -1669,6 +1826,20 @@ class CursesUi:
                 )
         if self.state.dataset.sqlite_error:
             rows.append(("SQLite note", self.state.dataset.sqlite_error))
+        forecast = make_usage_forecast(
+            replace(self.state.dataset, sessions=tuple(self.state.visible_sessions())),
+            self.options.limits,
+            prediction=self.options.prediction,
+        )
+        rows.append(
+            (
+                "Prediction algorithm",
+                prediction_algorithm_label(self.options.prediction.algorithm),
+            )
+        )
+        rows.extend(prediction_key_values(forecast))
+        if forecast.has_limits:
+            rows.extend(forecast_key_values(forecast))
         self.render_key_values(4, rows, width, height)
 
     def render_daily(self, height: int, width: int) -> None:
@@ -1677,7 +1848,12 @@ class CursesUi:
 
     def render_weekly(self, height: int, width: int) -> None:
         rows = self.state.weekly_rows()
-        self.render_usage_rows("week", rows, height, width)
+        forecast = make_usage_forecast(
+            replace(self.state.dataset, sessions=tuple(self.state.visible_sessions())),
+            self.options.limits,
+            prediction=self.options.prediction,
+        )
+        self.render_usage_rows("week", rows, height, width, forecast.weekly)
 
     def render_monthly(self, height: int, width: int) -> None:
         rows = self.state.monthly_rows()
@@ -1775,16 +1951,28 @@ class CursesUi:
             return 18
         return 14
 
-    def render_usage_rows(self, label: str, rows, height: int, width: int) -> None:
+    def render_usage_rows(
+        self,
+        label: str,
+        rows,
+        height: int,
+        width: int,
+        forecast_window: ForecastWindow | None = None,
+    ) -> None:
         max_total = max((row.tokens.total_tokens for row in rows), default=0)
         header = (
             f"{label:<16} {'usage':<14} "
             f"{self.aggregate_header_fields()}"
         )
+        if forecast_window and forecast_window.enabled and label == "week":
+            header += " forecast"
         self.render_themed_text(4, 0, header[: max(0, width - 1)], curses.A_BOLD)
         for offset, row in enumerate(rows[: max(0, height - 7)], start=5):
             prefix = f"{row.key:<16} "
             suffix = " " + self.aggregate_value_fields(row)
+            status = usage_row_forecast_status(label, row.key, forecast_window)
+            if status:
+                suffix += f" {status}"
             self.safe_addstr(offset, 0, prefix)
             self.render_themed_bar(
                 offset,
@@ -2137,6 +2325,30 @@ def appearance_setting_label(field: str) -> str:
         "themed_bars": "themed usage bars",
     }
     return labels.get(field, field)
+
+
+def misc_setting_label(field: str) -> str:
+    labels = {
+        "prediction_algorithm": "prediction algorithm",
+    }
+    return labels.get(field, field)
+
+
+def cycle_prediction_algorithm(prediction: PredictionConfig) -> PredictionConfig:
+    try:
+        index = PREDICTION_ALGORITHMS.index(prediction.algorithm)
+    except ValueError:
+        index = 0
+    algorithm = PREDICTION_ALGORITHMS[(index + 1) % len(PREDICTION_ALGORITHMS)]
+    return PredictionConfig(algorithm=algorithm)
+
+
+def prediction_algorithm_label(algorithm: str) -> str:
+    labels = {
+        "recent_rate": "recent rate",
+        "previous_period": "previous period",
+    }
+    return labels.get(algorithm, algorithm.replace("_", " "))
 
 
 def keybinding_action_label(action: str) -> str:

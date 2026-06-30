@@ -8,6 +8,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
+from codex_token_usage.forecast import LimitConfig
 from codex_token_usage.models import (
     SessionMetadata,
     SessionUsage,
@@ -135,6 +136,53 @@ class ReportTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].key, "s2")
+
+    def test_forecast_output_for_table_json_and_csv(self) -> None:
+        dataset = sample_dataset()
+        limits = LimitConfig(five_hour_tokens=5_000, weekly_tokens=10_000)
+        as_of = datetime.fromisoformat("2026-06-02T14:00:00+00:00")
+
+        table = render_report(
+            dataset,
+            "table",
+            "week",
+            limits=limits,
+            as_of=as_of,
+        )
+        payload = json.loads(
+            render_report(
+                dataset,
+                "json",
+                "week",
+                limits=limits,
+                as_of=as_of,
+            )
+        )
+        csv_rows = list(
+            csv.DictReader(
+                io.StringIO(
+                    render_report(
+                        dataset,
+                        "csv",
+                        "week",
+                        limits=limits,
+                        as_of=as_of,
+                    )
+                )
+            )
+        )
+
+        self.assertIn("forecast warnings", table)
+        self.assertIn("usage predictions", table)
+        self.assertIn("forecast_status", table)
+        self.assertIn("5h", table)
+        self.assertEqual(payload["forecast"]["five_hour"]["status"], "warning")
+        self.assertEqual(payload["forecast"]["weekly"]["status"], "warning")
+        self.assertEqual(payload["forecast"]["predictions"][0]["name"], "next_5_hours")
+        self.assertEqual(payload["forecast"]["predictions"][0]["projected"], 10_000)
+        self.assertEqual(csv_rows[0]["forecast_status"], "warning")
+        self.assertEqual(csv_rows[0]["forecast_limit"], "10000")
+        self.assertEqual(csv_rows[0]["forecast_projected"], "13263")
 
 
 def sample_dataset() -> UsageDataset:
