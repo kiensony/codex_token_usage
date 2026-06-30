@@ -79,3 +79,25 @@ Run tests with:
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
+
+## Linux standalone binary
+
+The `Build Linux Binary` GitHub Actions workflow builds a `linux-x86_64` standalone executable with Python bundled by PyInstaller. The installable artifact is named like:
+
+```text
+codex-token-usage-0.1.0-linux-x86_64.tar.gz
+```
+
+Install from the extracted archive with:
+
+```bash
+tar -xzf codex-token-usage-0.1.0-linux-x86_64.tar.gz
+cd codex-token-usage-0.1.0-linux-x86_64
+sudo ./install.sh
+```
+
+To install somewhere else, set `PREFIX` or `BINDIR`:
+
+```bash
+PREFIX="$HOME/.local" ./install.sh
+```

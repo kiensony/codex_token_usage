@@ -1,0 +1,98 @@
+name: Build Linux Binary
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux-binary:
+    name: Linux x86_64 standalone binary
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+          python -m pip install .
+
+      - name: Run tests
+        run: PYTHONPATH=src python -m unittest discover -s tests
+
+      - name: Build standalone executable
+        run: |
+          python -m PyInstaller \
+            --clean \
+            --onefile \
+            --name codex-token-usage \
+            --collect-data codex_token_usage \
+            packaging/pyinstaller_entry.py
+
+      - name: Verify bundled executable
+        run: |
+          ./dist/codex-token-usage --help
+          ./dist/codex-token-usage --format json --codex-home "$RUNNER_TEMP/missing-codex-home"
+
+      - name: Package installable archive
+        run: |
+          set -eu
+          version="$(python -c 'import codex_token_usage; print(codex_token_usage.__version__)')"
+          package="codex-token-usage-${version}-linux-x86_64"
+          package_dir="dist/${package}"
+          mkdir -p "$package_dir/bin"
+          cp dist/codex-token-usage "$package_dir/bin/codex-token-usage"
+          cp packaging/install-linux.sh "$package_dir/install.sh"
+          chmod 755 "$package_dir/bin/codex-token-usage" "$package_dir/install.sh"
+          tar -C dist -czf "dist/${package}.tar.gz" "$package"
+          sha256sum "dist/${package}.tar.gz" "dist/codex-token-usage" > "dist/${package}.sha256"
+          echo "PACKAGE_NAME=${package}" >> "$GITHUB_ENV"
+
+      - name: Upload installable archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: |
+            dist/${{ env.PACKAGE_NAME }}.tar.gz
+            dist/${{ env.PACKAGE_NAME }}.sha256
+
+      - name: Upload raw executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-token-usage-linux-x86_64
+          path: dist/codex-token-usage
+
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              "dist/${PACKAGE_NAME}.tar.gz" \
+              "dist/${PACKAGE_NAME}.sha256" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "dist/${PACKAGE_NAME}.tar.gz" \
+              "dist/${PACKAGE_NAME}.sha256" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
