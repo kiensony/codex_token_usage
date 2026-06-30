@@ -35,8 +35,8 @@ Options:
 - `--lightness 0..1`: one-run theme brightness override
 
 Settings are stored at `${XDG_CONFIG_HOME:-~/.config}/codex-token-usage/config.json`.
-The `--setup` wizard controls the theme, optional display columns, custom model rates, token warning limits, and prediction algorithm.
-Inside the TUI, `c` opens a curses settings screen for theme, display columns, model column width, model rates, prediction algorithm, and main TUI keybindings without leaving the app.
+The `--setup` wizard controls the theme, optional display columns, custom model rates, token warning limits, prediction algorithm, and TUI auto refresh interval.
+Inside the TUI, `c` opens a curses settings screen for theme, display columns, model column width, model rates, prediction algorithm, auto refresh interval, and main TUI keybindings without leaving the app.
 Available presets are loaded from HyFetch's preset table, including `rainbow`, `transgender`, `nonbinary`, `abrosexual`, `aromantic`, `intersex`, `progress`, `baker`, `band`, and many more. Compatibility aliases include `trans`, `nonhuman-unit`, and `ynullflux`.
 The TUI applies the selected flag palette to global chrome, headings, selected rows, and usage bars when curses reports color support. Table, JSON, and CSV output stay uncolored.
 
@@ -44,7 +44,7 @@ Project/folder usage groups sessions by their exact recorded working directory (
 
 Display settings can show or hide cached tokens, cached %, estimated API cost, reasoning level, cache miss, reasoning tokens, model, and cwd/title columns, and set the session table model column width to `auto` or a fixed 8-40 character width. Appearance settings can change the flag palette with a paged flag picker, color mode, lightness, accent line, and themed usage bars. Estimated cost uses standard OpenAI per-1M-token rates for known models, with any custom rates from setup overriding the built-in table. Unknown models show `n/a`; mixed aggregates with some unknown model rates are marked with `*`.
 
-The overview shows projected usage for the next 5 hours, next day, next week, and next 30-day month. The prediction algorithm is configurable from the Misc settings tab: `recent_rate` projects from the current active usage rate, while `previous_period` assumes the next period will match the previous period's usage.
+The overview shows projected usage for the next 5 hours, next day, next week, and next 30-day month. The prediction algorithm is configurable from the Misc settings tab: `recent_rate` projects from the current active usage rate, while `previous_period` assumes the next period will match the previous period's usage. The Misc tab can also set an automatic TUI refresh interval in seconds; `0` or `off` disables it.
 
 Forecast warnings are disabled until a positive token limit is configured. The 5-hour forecast uses sessions active in the rolling last 5 hours and projects that recent rate across a 5-hour horizon. The weekly forecast uses the current ISO week-to-date rate and projects it through the end of the week. Table and graph reports append compact forecast and prediction sections, JSON reports include a top-level `forecast` object, and weekly CSV rows include forecast columns when limits are enabled.
 
@@ -58,6 +58,9 @@ Example config snippet:
   },
   "prediction": {
     "algorithm": "recent_rate"
+  },
+  "misc": {
+    "auto_refresh_seconds": 30
   }
 }
 ```
@@ -92,7 +95,7 @@ TUI settings keys:
 - Display Columns tab: toggles token/detail columns or edits model width
 - Appearance tab: opens a flag picker, cycles color mode, edits lightness, and toggles accent line or themed bars
 - Keybindings tab: select an action, `Enter` captures a replacement key, `a` captures an additional key, and `x` resets the selected action to its default
-- Misc tab: `Enter` cycles the prediction algorithm
+- Misc tab: `Enter` cycles the prediction algorithm or edits auto refresh seconds
 - Flag picker: `h` / `j` / `k` / `l` moves between flags, `n` / `p` changes page, `Enter` chooses
 - `s`: save settings
 - `q` / `Esc`: cancel settings changes

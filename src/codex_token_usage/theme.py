@@ -227,6 +227,7 @@ class ThemeLoadResult:
     keybindings: KeybindingConfig = KeybindingConfig()
     limits: LimitConfig = LimitConfig()
     prediction: PredictionConfig = PredictionConfig()
+    auto_refresh_seconds: int | None = None
 
 
 @dataclass(frozen=True)
@@ -257,6 +258,7 @@ def load_theme_config(path: Path | None = None) -> ThemeLoadResult:
         pricing = parse_pricing_config(raw)
         limits = parse_limit_config(raw)
         prediction = parse_prediction_config(raw)
+        auto_refresh_seconds = parse_auto_refresh_config(raw)
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         return ThemeLoadResult(
             config=ThemeConfig(),
@@ -278,6 +280,7 @@ def load_theme_config(path: Path | None = None) -> ThemeLoadResult:
         keybindings=keybindings,
         limits=limits,
         prediction=prediction,
+        auto_refresh_seconds=auto_refresh_seconds,
     )
 
 
@@ -410,6 +413,19 @@ def parse_prediction_config(raw: object) -> PredictionConfig:
     return PredictionConfig(algorithm=algorithm)
 
 
+def parse_auto_refresh_config(raw: object) -> int | None:
+    if not isinstance(raw, dict):
+        raise ValueError("config must be a JSON object")
+
+    misc = raw.get("misc", {})
+    if not isinstance(misc, dict):
+        raise ValueError("misc must be a JSON object")
+    return parse_auto_refresh_seconds(
+        misc.get("auto_refresh_seconds"),
+        "misc.auto_refresh_seconds",
+    )
+
+
 def save_theme_config(
     config: ThemeConfig,
     path: Path | None = None,
@@ -418,6 +434,7 @@ def save_theme_config(
     keybindings: KeybindingConfig | None = None,
     limits: LimitConfig | None = None,
     prediction: PredictionConfig | None = None,
+    auto_refresh_seconds: int | None = None,
 ) -> Path:
     config_path = path or default_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -426,6 +443,10 @@ def save_theme_config(
     keybinding_config = keybindings or KeybindingConfig()
     limit_config = limits or LimitConfig()
     prediction_config = prediction or PredictionConfig()
+    refresh_seconds = parse_auto_refresh_seconds(
+        auto_refresh_seconds,
+        "misc.auto_refresh_seconds",
+    )
     payload = {
         "version": CONFIG_VERSION,
         "theme": {
@@ -463,6 +484,9 @@ def save_theme_config(
         },
         "prediction": {
             "algorithm": prediction_config.algorithm,
+        },
+        "misc": {
+            "auto_refresh_seconds": refresh_seconds,
         },
         "keybindings": {
             action: list(labels)
@@ -551,6 +575,31 @@ def parse_token_limit(value: object, name: str = "token limit") -> int | None:
     if limit == 0:
         return None
     return limit
+
+
+def parse_auto_refresh_seconds(
+    value: object,
+    name: str = "auto refresh seconds",
+) -> int | None:
+    if isinstance(value, str):
+        value = value.strip()
+        if value.lower() in ("", "-", "none", "off", "disabled"):
+            return None
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a whole number of seconds")
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError(f"{name} must be a whole number of seconds")
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a whole number of seconds") from exc
+    if seconds < 0:
+        raise ValueError(f"{name} must not be negative")
+    if seconds == 0:
+        return None
+    return seconds
 
 
 def parse_model_column_width(value: object) -> int | None:
@@ -757,6 +806,7 @@ def run_setup_wizard(
     current_keybindings = result.keybindings
     current_limits = result.limits
     current_prediction = result.prediction
+    current_auto_refresh_seconds = result.auto_refresh_seconds
 
     def write(line: str = "") -> None:
         output.write(line + "\n")
@@ -832,6 +882,11 @@ def run_setup_wizard(
         next_pricing = prompt_pricing_config(current_pricing, input_fn, write)
         next_limits = prompt_limit_config(current_limits, input_fn, write)
         next_prediction = prompt_prediction_config(current_prediction, input_fn, write)
+        next_auto_refresh_seconds = prompt_auto_refresh_config(
+            current_auto_refresh_seconds,
+            input_fn,
+            write,
+        )
 
         answer = input_fn("Save this config? [Y/n]: ").strip().lower()
     except (EOFError, KeyboardInterrupt, ValueError) as exc:
@@ -850,6 +905,7 @@ def run_setup_wizard(
         keybindings=current_keybindings,
         limits=next_limits,
         prediction=next_prediction,
+        auto_refresh_seconds=next_auto_refresh_seconds,
     )
     write(f"saved {saved}")
     return 0
@@ -995,6 +1051,25 @@ def prompt_prediction_config(
         write,
     )
     return PredictionConfig(algorithm=algorithm)
+
+
+def prompt_auto_refresh_config(
+    current: int | None,
+    input_fn: Callable[[str], str],
+    write: Callable[[str], None],
+) -> int | None:
+    write("")
+    write("Auto refresh:")
+    write("  Blank keeps the current value. Use 0 or off to disable.")
+    default_text = "off" if current is None else str(current)
+    while True:
+        raw = input_fn(f"TUI auto refresh seconds [{default_text}]: ").strip()
+        if not raw:
+            return current
+        try:
+            return parse_auto_refresh_seconds(raw, "TUI auto refresh seconds")
+        except ValueError as exc:
+            write(str(exc))
 
 
 def prompt_token_limit(

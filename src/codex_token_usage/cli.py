@@ -192,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
             theme_status=theme_result.status,
             limits=limits,
             prediction=theme_result.prediction,
+            auto_refresh_seconds=theme_result.auto_refresh_seconds,
         )
     )
 

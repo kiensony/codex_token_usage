@@ -21,6 +21,7 @@ from codex_token_usage.tui import (
     TuiState,
     appearance_preview_block_height,
     appearance_setting_label,
+    auto_refresh_label,
     cycle_prediction_algorithm,
     cycle_theme_color_mode,
     cycle_theme_preset,
@@ -32,6 +33,7 @@ from codex_token_usage.tui import (
     forecast_key_values,
     prediction_algorithm_label,
     prediction_key_values,
+    parse_settings_auto_refresh_seconds,
     parse_settings_lightness,
     parse_settings_model_width,
     parse_settings_rate,
@@ -265,9 +267,18 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(display_setting_label("estimated_cost"), "estimated cost")
         self.assertEqual(appearance_setting_label("themed_bars"), "themed usage bars")
         self.assertEqual(prediction_algorithm_label("recent_rate"), "recent rate")
+        self.assertEqual(auto_refresh_label(None), "off")
+        self.assertEqual(auto_refresh_label(1), "1 second")
+        self.assertEqual(auto_refresh_label(30), "30 seconds")
         self.assertEqual(parse_settings_rate("1.25"), 1.25)
         self.assertEqual(parse_settings_model_width("auto"), None)
         self.assertEqual(parse_settings_model_width("18"), 18)
+        self.assertEqual(parse_settings_auto_refresh_seconds("off"), None)
+        self.assertEqual(parse_settings_auto_refresh_seconds("30"), 30)
+        self.assertIn(
+            "whole number",
+            parse_settings_auto_refresh_seconds("1.5"),
+        )
 
     def test_forecast_key_values(self) -> None:
         forecast = make_usage_forecast(
@@ -291,14 +302,38 @@ class TuiStateTests(unittest.TestCase):
         prediction = cycle_prediction_algorithm(PredictionConfig())
         self.assertEqual(prediction.algorithm, "previous_period")
 
-        ui = CursesUi(None, TuiState(dataset=dataset()), TuiOptions(codex_home=Path("/tmp")))
-        prediction, status = ui.apply_misc_setting(
+        ui = CursesUi(
+            None,
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        prediction, auto_refresh_seconds, status = ui.apply_misc_setting(
             PredictionConfig(),
+            None,
             "prediction_algorithm",
         )
 
         self.assertEqual(prediction.algorithm, "previous_period")
+        self.assertIsNone(auto_refresh_seconds)
         self.assertEqual(status, "prediction algorithm: previous period")
+
+    def test_auto_refresh_timeout_calculation(self) -> None:
+        ui = CursesUi(
+            None,
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp"), auto_refresh_seconds=10),
+        )
+
+        ui.next_auto_refresh_at = 15.0
+        self.assertEqual(ui.next_input_timeout_ms(10.0), 5000)
+        self.assertEqual(ui.next_input_timeout_ms(15.0), 0)
+
+        ui = CursesUi(
+            None,
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+        self.assertEqual(ui.next_input_timeout_ms(10.0), -1)
 
     def test_settings_theme_helpers(self) -> None:
         theme = ThemeConfig(enabled=False, preset="rainbow", color_mode="8bit")

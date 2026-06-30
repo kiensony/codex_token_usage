@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import curses
+import time
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -46,6 +47,7 @@ from .theme import (
     RGB,
     ThemeConfig,
     load_theme_config,
+    parse_auto_refresh_seconds,
     rgb_to_ansi256,
     rgb_to_basic_color,
     save_theme_config,
@@ -137,7 +139,7 @@ APPEARANCE_SETTING_FIELDS = (
     "accent_line",
     "themed_bars",
 )
-MISC_SETTING_FIELDS = ("prediction_algorithm",)
+MISC_SETTING_FIELDS = ("prediction_algorithm", "auto_refresh_seconds")
 
 
 @dataclass(frozen=True)
@@ -153,6 +155,7 @@ class TuiOptions:
     theme_status: str = ""
     limits: LimitConfig = LimitConfig()
     prediction: PredictionConfig = PredictionConfig()
+    auto_refresh_seconds: int | None = None
 
 
 @dataclass(frozen=True)
@@ -595,14 +598,20 @@ class CursesUi:
         self.theme_pairs: list[int] = []
         self.preview_pairs: dict[RGB, int] = {}
         self.accent_attr = curses.A_BOLD
+        self.next_auto_refresh_at: float | None = None
 
     def run(self) -> None:
         curses.curs_set(0)
         self.stdscr.keypad(True)
         self.init_theme_colors()
+        self.schedule_next_auto_refresh()
         while not self.state.should_quit:
             self.render()
+            self.configure_input_timeout()
             key = self.stdscr.getch()
+            if key == -1:
+                self.handle_auto_refresh()
+                continue
             self.handle_key(key)
 
     def init_theme_colors(self) -> None:
@@ -724,6 +733,7 @@ class CursesUi:
             self.state = self.state.shift_date_window(1)
         elif action == "reload":
             self.state = self.state.reload(self.reload_dataset)
+            self.schedule_next_auto_refresh()
         elif action == "open_settings":
             self.open_settings()
         elif action == "filter":
@@ -748,13 +758,57 @@ class CursesUi:
     def reload_all_time(self) -> None:
         self.state = self.state.reload(self.reload_dataset)
         self.state = replace(self.state, status="date range: all time")
+        self.schedule_next_auto_refresh()
+
+    def configure_input_timeout(self) -> None:
+        if self.stdscr is None or not hasattr(self.stdscr, "timeout"):
+            return
+        timeout_ms = self.next_input_timeout_ms(time.monotonic())
+        self.stdscr.timeout(timeout_ms)
+
+    def set_blocking_input(self) -> None:
+        if self.stdscr is None or not hasattr(self.stdscr, "timeout"):
+            return
+        self.stdscr.timeout(-1)
+
+    def next_input_timeout_ms(self, now: float) -> int:
+        if self.options.auto_refresh_seconds is None:
+            return -1
+        if self.next_auto_refresh_at is None:
+            return 0
+        remaining = self.next_auto_refresh_at - now
+        if remaining <= 0:
+            return 0
+        return max(1, round(remaining * 1000))
+
+    def schedule_next_auto_refresh(self, now: float | None = None) -> None:
+        if self.options.auto_refresh_seconds is None:
+            self.next_auto_refresh_at = None
+            return
+        current = time.monotonic() if now is None else now
+        self.next_auto_refresh_at = current + self.options.auto_refresh_seconds
+
+    def handle_auto_refresh(self) -> None:
+        if self.options.auto_refresh_seconds is None:
+            return
+        now = time.monotonic()
+        if self.next_auto_refresh_at is not None and now < self.next_auto_refresh_at:
+            return
+        self.state = self.state.reload(self.reload_dataset)
+        self.state = replace(
+            self.state,
+            status=f"auto-refreshed {len(self.state.dataset.sessions)} sessions",
+        )
+        self.schedule_next_auto_refresh(now)
 
     def open_settings(self) -> None:
+        self.set_blocking_input()
         theme = self.options.theme
         display = self.options.display
         custom_prices = dict(self.options.pricing.model_prices)
         keybindings = self.options.keybindings
         prediction = self.options.prediction
+        auto_refresh_seconds = self.options.auto_refresh_seconds
         model_names = settings_model_names(self.state.dataset, custom_prices)
         tab_index = 0
         model_index = 0
@@ -783,6 +837,7 @@ class CursesUi:
                 keybindings,
                 keybinding_index,
                 prediction,
+                auto_refresh_seconds,
                 misc_field_index,
                 status,
             )
@@ -805,6 +860,7 @@ class CursesUi:
                         keybindings=keybindings,
                         limits=self.options.limits,
                         prediction=prediction,
+                        auto_refresh_seconds=auto_refresh_seconds,
                     )
                 except OSError as exc:
                     status = f"settings save failed: {exc}"
@@ -818,9 +874,11 @@ class CursesUi:
                     keybindings=loaded.keybindings,
                     limits=loaded.limits,
                     prediction=loaded.prediction,
+                    auto_refresh_seconds=loaded.auto_refresh_seconds,
                     theme_status=loaded.status,
                 )
                 self.keymap = keymap_for_config(loaded.keybindings)
+                self.schedule_next_auto_refresh()
                 self.theme_pairs = []
                 self.accent_attr = curses.A_BOLD
                 self.init_theme_colors()
@@ -960,8 +1018,9 @@ class CursesUi:
                     )
                     continue
                 if tab_index == 4:
-                    prediction, status = self.apply_misc_setting(
+                    prediction, auto_refresh_seconds, status = self.apply_misc_setting(
                         prediction,
+                        auto_refresh_seconds,
                         MISC_SETTING_FIELDS[misc_field_index],
                     )
                     continue
@@ -996,6 +1055,7 @@ class CursesUi:
         keybindings: KeybindingConfig,
         keybinding_index: int,
         prediction: PredictionConfig,
+        auto_refresh_seconds: int | None,
         misc_field_index: int,
         status: str,
     ) -> None:
@@ -1021,6 +1081,7 @@ class CursesUi:
                 content_top,
                 width,
                 prediction,
+                auto_refresh_seconds,
                 misc_field_index,
             )
         else:
@@ -1179,6 +1240,7 @@ class CursesUi:
         top: int,
         width: int,
         prediction: PredictionConfig,
+        auto_refresh_seconds: int | None,
         selected_field: int,
     ) -> None:
         rows = [
@@ -1186,6 +1248,11 @@ class CursesUi:
                 "prediction_algorithm",
                 "Prediction algorithm",
                 prediction_algorithm_label(prediction.algorithm),
+            ),
+            (
+                "auto_refresh_seconds",
+                "Auto refresh",
+                auto_refresh_label(auto_refresh_seconds),
             ),
         ]
         self.safe_addstr(top, 0, "Misc", self.accent_attr)
@@ -1200,7 +1267,7 @@ class CursesUi:
         self.safe_addstr(
             top + 2 + len(rows) + 1,
             0,
-            "Enter cycles prediction algorithms.",
+            "Enter cycles prediction algorithms or edits auto refresh seconds.",
             curses.A_DIM,
         )
 
@@ -1399,15 +1466,32 @@ class CursesUi:
     def apply_misc_setting(
         self,
         prediction: PredictionConfig,
+        auto_refresh_seconds: int | None,
         field: str,
-    ) -> tuple[PredictionConfig, str]:
+    ) -> tuple[PredictionConfig, int | None, str]:
         if field == "prediction_algorithm":
             next_prediction = cycle_prediction_algorithm(prediction)
             return (
                 next_prediction,
+                auto_refresh_seconds,
                 f"prediction algorithm: {prediction_algorithm_label(next_prediction.algorithm)}",
             )
-        return prediction, "unknown misc setting"
+        if field == "auto_refresh_seconds":
+            refresh_value = self.prompt_input(
+                "auto refresh seconds, 0/off disables: ",
+                auto_refresh_input_value(auto_refresh_seconds),
+            )
+            if refresh_value is None:
+                return prediction, auto_refresh_seconds, "auto refresh unchanged"
+            parsed_refresh = parse_settings_auto_refresh_seconds(refresh_value)
+            if isinstance(parsed_refresh, str):
+                return prediction, auto_refresh_seconds, parsed_refresh
+            return (
+                prediction,
+                parsed_refresh,
+                f"auto refresh: {auto_refresh_label(parsed_refresh)}",
+            )
+        return prediction, auto_refresh_seconds, "unknown misc setting"
 
     def apply_keybinding_setting(
         self,
@@ -1704,6 +1788,7 @@ class CursesUi:
         self.stdscr.getch()
 
     def prompt_filter(self) -> None:
+        self.set_blocking_input()
         height, width = self.stdscr.getmaxyx()
         prompt = "filter: "
         self.stdscr.move(height - 1, 0)
@@ -2370,6 +2455,7 @@ def appearance_setting_label(field: str) -> str:
 def misc_setting_label(field: str) -> str:
     labels = {
         "prediction_algorithm": "prediction algorithm",
+        "auto_refresh_seconds": "auto refresh",
     }
     return labels.get(field, field)
 
@@ -2389,6 +2475,24 @@ def prediction_algorithm_label(algorithm: str) -> str:
         "previous_period": "previous period",
     }
     return labels.get(algorithm, algorithm.replace("_", " "))
+
+
+def auto_refresh_label(seconds: int | None) -> str:
+    if seconds is None:
+        return "off"
+    unit = "second" if seconds == 1 else "seconds"
+    return f"{seconds} {unit}"
+
+
+def auto_refresh_input_value(seconds: int | None) -> str:
+    return "0" if seconds is None else str(seconds)
+
+
+def parse_settings_auto_refresh_seconds(value: str) -> int | None | str:
+    try:
+        return parse_auto_refresh_seconds(value, "auto refresh")
+    except ValueError as exc:
+        return str(exc)
 
 
 def keybinding_action_label(action: str) -> str:
