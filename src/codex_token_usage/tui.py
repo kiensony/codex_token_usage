@@ -12,8 +12,8 @@ from .keybindings import (
     KeybindingConfig,
     format_keybinding_config,
     format_keybinding_labels,
+    key_label_for_code,
     keymap_for_config,
-    parse_keybinding_text,
     reset_keybinding,
     update_keybinding,
 )
@@ -776,8 +776,16 @@ class CursesUi:
                     status = f"keybinding: {keybinding_action_label(KEYBINDING_ACTIONS[keybinding_index])}"
                 continue
             if key in (ord("a"),):
+                if tab_index == 3:
+                    action = KEYBINDING_ACTIONS[keybinding_index]
+                    keybindings, status = self.capture_keybinding(
+                        keybindings,
+                        action,
+                        append=True,
+                    )
+                    continue
                 if tab_index != 0:
-                    status = "add is only available on Model Pricing"
+                    status = "add is only available on Model Pricing or Keybindings"
                     continue
                 model = self.prompt_input("model name: ")
                 if not model:
@@ -896,7 +904,7 @@ class CursesUi:
             start_index=1,
         )
         footer = (
-            "1-4 tabs  h/j/k/l select  enter/e edit  model: a add x reset  keys: x reset  "
+            "1-4 tabs  h/j/k/l select  enter/e edit  model: a add x reset  keys: a add x reset  "
             "s save  q cancel"
         )
         self.render_themed_text(
@@ -1004,7 +1012,7 @@ class CursesUi:
         self.safe_addstr(
             top + 1,
             0,
-            "Enter edits comma-separated keys. x resets the selected action.",
+            "Enter captures a replacement key. a adds a key. x resets the selected action.",
             curses.A_DIM,
         )
         header_y = top + 3
@@ -1225,22 +1233,42 @@ class CursesUi:
         keybindings: KeybindingConfig,
         action: str,
     ) -> tuple[KeybindingConfig, str]:
-        current = format_keybinding_config(keybindings, action)
-        value = self.prompt_input(
-            f"{keybinding_action_label(action)} keys: ",
-            current,
+        return self.capture_keybinding(keybindings, action, append=False)
+
+    def capture_keybinding(
+        self,
+        keybindings: KeybindingConfig,
+        action: str,
+        append: bool,
+    ) -> tuple[KeybindingConfig, str]:
+        label = self.capture_keybinding_label(
+            f"{keybinding_action_label(action)}: press key to bind"
         )
-        if value is None:
-            return keybindings, "keybinding unchanged"
+        if label is None:
+            return keybindings, "unsupported key"
+        labels = keybindings.labels(action)
+        if append:
+            if label in labels:
+                return keybindings, f"{label} is already assigned to {keybinding_action_label(action)}"
+            next_labels = (*labels, label)
+        else:
+            next_labels = (label,)
         try:
-            labels = parse_keybinding_text(value, action)
-            next_keybindings = update_keybinding(keybindings, action, labels)
+            next_keybindings = update_keybinding(keybindings, action, next_labels)
         except ValueError as exc:
             return keybindings, str(exc)
         return (
             next_keybindings,
-            f"{keybinding_action_label(action)}: {format_keybinding_labels(labels)}",
+            f"{keybinding_action_label(action)}: {format_keybinding_labels(next_labels)}",
         )
+
+    def capture_keybinding_label(self, prompt: str) -> str | None:
+        height, width = self.stdscr.getmaxyx()
+        self.stdscr.move(height - 1, 0)
+        self.stdscr.clrtoeol()
+        self.safe_addstr(height - 1, 0, prompt[: max(0, width - 1)], curses.A_DIM)
+        key = self.stdscr.getch()
+        return key_label_for_code(key)
 
     def choose_flag_preset(self, theme: ThemeConfig) -> ThemeConfig | None:
         current = theme_current_preset(theme)

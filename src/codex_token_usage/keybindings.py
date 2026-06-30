@@ -258,6 +258,17 @@ def key_codes_for_label(label: str) -> tuple[int, ...]:
     raise ValueError(f"unknown key label: {label}")
 
 
+def key_label_for_code(code: int) -> str | None:
+    for _name, (label, codes) in NAMED_KEY_CODES.items():
+        if code in codes:
+            return label
+    if 1 <= code <= 26:
+        return f"Ctrl+{chr(code + ord('@'))}"
+    if 32 <= code <= 126:
+        return chr(code)
+    return None
+
+
 def format_keybinding_labels(labels: tuple[str, ...]) -> str:
     return ", ".join(labels)
 

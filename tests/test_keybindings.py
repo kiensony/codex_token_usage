@@ -5,6 +5,7 @@ import unittest
 from codex_token_usage.keybindings import (
     KeybindingConfig,
     key_codes_for_label,
+    key_label_for_code,
     normalize_key_label,
     parse_keybinding_text,
     reset_keybinding,
@@ -18,6 +19,8 @@ class KeybindingTests(unittest.TestCase):
         self.assertEqual(normalize_key_label("ctrl+x"), "Ctrl+X")
         self.assertEqual(normalize_key_label("S"), "S")
         self.assertEqual(key_codes_for_label("Ctrl+A"), (1,))
+        self.assertEqual(key_label_for_code(1), "Ctrl+A")
+        self.assertEqual(key_label_for_code(ord(",")), "Comma")
         self.assertEqual(parse_keybinding_text("n, Ctrl+X"), ("n", "Ctrl+X"))
 
     def test_empty_and_unknown_key_labels_are_rejected(self) -> None:

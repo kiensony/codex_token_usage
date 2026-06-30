@@ -221,6 +221,28 @@ class TuiStateTests(unittest.TestCase):
         ui.handle_key(ord("n"))
         self.assertEqual(ui.state.view, "daily")
 
+    def test_curses_ui_captures_keybindings(self) -> None:
+        ui = CursesUi(
+            FakeStdScr([ord("n"), ord("m")]),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        keybindings, status = ui.apply_keybinding_setting(
+            KeybindingConfig(),
+            "next_view",
+        )
+        self.assertEqual(keybindings.labels("next_view"), ("n",))
+        self.assertEqual(status, "Next view: n")
+
+        keybindings, status = ui.capture_keybinding(
+            keybindings,
+            "next_view",
+            append=True,
+        )
+        self.assertEqual(keybindings.labels("next_view"), ("n", "m"))
+        self.assertEqual(status, "Next view: n, m")
+
     def test_settings_helpers(self) -> None:
         custom = {"custom-model": ModelPrice(1.0, 0.1, 2.0)}
         names = settings_model_names(dataset(), custom)
@@ -342,6 +364,26 @@ def session(
         ),
         has_token_event=True,
     )
+
+
+class FakeStdScr:
+    def __init__(self, keys: list[int]) -> None:
+        self.keys = keys
+
+    def getmaxyx(self) -> tuple[int, int]:
+        return (24, 80)
+
+    def move(self, _y: int, _x: int) -> None:
+        return None
+
+    def clrtoeol(self) -> None:
+        return None
+
+    def addstr(self, _y: int, _x: int, _text: str, _attr: int = 0) -> None:
+        return None
+
+    def getch(self) -> int:
+        return self.keys.pop(0)
 
 
 if __name__ == "__main__":

@@ -67,7 +67,7 @@ TUI settings keys:
 - Model Pricing tab: `a` adds a custom model rate, `x` removes the selected model's custom override
 - Display Columns tab: toggles token/detail columns or edits model width
 - Appearance tab: opens a flag picker, cycles color mode, edits lightness, and toggles accent line or themed bars
-- Keybindings tab: edits comma-separated key labels, `x` resets the selected action to its default
+- Keybindings tab: select an action, `Enter` captures a replacement key, `a` captures an additional key, and `x` resets the selected action to its default
 - Flag picker: `h` / `j` / `k` / `l` moves between flags, `n` / `p` changes page, `Enter` chooses
 - `s`: save settings
 - `q` / `Esc`: cancel settings changes
