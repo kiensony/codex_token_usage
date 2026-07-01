@@ -16,6 +16,7 @@ from .forecast_display import (
 from .formatting import truncate, visible_start
 from .settings_model import prediction_algorithm_label
 from .state import TAB_VIEWS, VIEW_LABELS
+from .usage_rates import current_usage_rate_rows
 from .view_overlays import ViewOverlayMixin
 
 
@@ -132,6 +133,9 @@ class ViewRendererMixin(ViewOverlayMixin):
         rows.extend(prediction_key_values(forecast))
         if forecast.has_limits:
             rows.extend(forecast_key_values(forecast))
+        rows.extend(
+            current_usage_rate_rows(self.state.visible_sessions(), forecast.generated_at)
+        )
         self.render_key_values(4, rows, width, height)
     def render_daily(self, height: int, width: int) -> None:
         rows = self.state.daily_rows()

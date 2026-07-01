@@ -100,6 +100,7 @@ def parse_session_jsonl(path: Path) -> SessionUsage:
     metadata = SessionMetadata(session_id=session_id)
     final_tokens: TokenBreakdown | None = None
     has_token_event = False
+    request_count = 0
     corrupt_lines = 0
     latest_timestamp: datetime | None = None
 
@@ -122,6 +123,7 @@ def parse_session_jsonl(path: Path) -> SessionUsage:
                 token_payload = extract_token_payload(event)
                 if token_payload is not None:
                     has_token_event = True
+                    request_count += 1
                     parsed_tokens = parse_token_breakdown(token_payload)
                     final_tokens = parsed_tokens.normalized()
     except OSError:
@@ -145,6 +147,7 @@ def parse_session_jsonl(path: Path) -> SessionUsage:
         tokens=tokens,
         metadata=metadata,
         has_token_event=has_token_event,
+        request_count=request_count,
         corrupt_lines=corrupt_lines,
     )
 

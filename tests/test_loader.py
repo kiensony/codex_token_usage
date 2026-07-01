@@ -38,6 +38,7 @@ class LoaderTests(unittest.TestCase):
             self.assertEqual(session.tokens.output_tokens, 8)
             self.assertEqual(session.tokens.cached_input_tokens, 5)
             self.assertEqual(session.tokens.reasoning_output_tokens, 3)
+            self.assertEqual(session.request_count, 2)
             self.assertEqual(session.reasoning_level, "medium")
 
     def test_corrupt_jsonl_lines_are_skipped(self) -> None:

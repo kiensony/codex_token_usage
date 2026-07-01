@@ -76,6 +76,7 @@ class SessionUsage:
     tokens: TokenBreakdown
     metadata: SessionMetadata
     has_token_event: bool = False
+    request_count: int = 0
     corrupt_lines: int = 0
 
     @property

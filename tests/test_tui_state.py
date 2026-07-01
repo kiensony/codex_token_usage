@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import curses
 import tempfile
 import unittest
 from datetime import date, datetime, timezone
@@ -26,6 +27,7 @@ from codex_token_usage.tui import (
     appearance_preview_block_height,
     appearance_setting_label,
     auto_refresh_label,
+    current_usage_rate_rows,
     cycle_prediction_algorithm,
     cycle_theme_color_mode,
     cycle_theme_preset,
@@ -327,6 +329,75 @@ class TuiStateTests(unittest.TestCase):
 
         ui.handle_key(ord("n"))
         self.assertEqual(ui.state.view, "daily")
+
+    def test_help_overlay_closes_from_multiple_keys_and_ignores_navigation(self) -> None:
+        for close_key in (ord("?"), ord("q"), 27):
+            with self.subTest(close_key=close_key):
+                ui = CursesUi(
+                    None,
+                    TuiState(dataset=dataset()).open_help(),
+                    TuiOptions(codex_home=Path("/tmp")),
+                )
+
+                ui.handle_key(ord("j"))
+
+                self.assertTrue(ui.state.help_open)
+                self.assertEqual(ui.state.selected_session().session_id, "beta")
+
+                ui.handle_key(close_key)
+
+                self.assertFalse(ui.state.help_open)
+                self.assertFalse(ui.state.should_quit)
+
+    def test_escape_backs_out_of_details_before_quitting(self) -> None:
+        ui = CursesUi(
+            None,
+            TuiState(dataset=dataset()).open_details(),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        ui.handle_key(27)
+
+        self.assertEqual(ui.state.view, "overview")
+        self.assertFalse(ui.state.should_quit)
+
+        ui.handle_key(27)
+
+        self.assertTrue(ui.state.should_quit)
+
+    def test_filter_prompt_supports_cursor_editing_and_escape_clear(self) -> None:
+        ui = CursesUi(
+            FakeStdScr(
+                [
+                    ord("r"),
+                    ord("e"),
+                    ord("p"),
+                    ord("o"),
+                    curses.KEY_LEFT,
+                    127,
+                    ord("x"),
+                    10,
+                ]
+            ),
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        ui.handle_key(ord("/"))
+
+        self.assertEqual(ui.state.filter_text, "rexo")
+        self.assertEqual(ui.state.status, "filter: rexo")
+
+        ui = CursesUi(
+            FakeStdScr([27]),
+            TuiState(dataset=dataset()).set_filter("repo"),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        ui.handle_key(ord("/"))
+
+        self.assertEqual(ui.state.filter_text, "")
+        self.assertEqual(ui.state.status, "filter cleared")
 
     def test_ctrl_s_opens_hidden_prompt(self) -> None:
         stdscr = FakeStdScr([27])
@@ -750,6 +821,94 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(prediction_rows[0][0], "Next 5h estimate")
         self.assertIn("tokens", prediction_rows[0][1])
 
+    def test_current_usage_rate_rows_cover_5h_day_week_and_month(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sessions = (
+                session(
+                    "recent",
+                    3600,
+                    1800,
+                    "/repo",
+                    "2026-06-18T11:00:00+00:00",
+                    root,
+                    request_count=2,
+                ),
+                session(
+                    "day",
+                    3600,
+                    1800,
+                    "/repo",
+                    "2026-06-18T01:00:00+00:00",
+                    root,
+                    request_count=1,
+                ),
+                session(
+                    "week",
+                    7200,
+                    3600,
+                    "/repo",
+                    "2026-06-16T12:00:00+00:00",
+                    root,
+                    request_count=2,
+                ),
+                session(
+                    "month",
+                    14400,
+                    7200,
+                    "/repo",
+                    "2026-06-03T12:00:00+00:00",
+                    root,
+                    request_count=4,
+                ),
+            )
+
+        rows = current_usage_rate_rows(
+            sessions,
+            datetime.fromisoformat("2026-06-18T12:00:00+00:00"),
+        )
+
+        self.assertEqual(
+            rows,
+            [
+                (
+                    "Current 5h TPS/RPS",
+                    "0.200 tok/s  0.000111 req/s  (3,600 tokens, 2 req)",
+                ),
+                (
+                    "Current day TPS/RPS",
+                    "0.167 tok/s  0.000069 req/s  (7,200 tokens, 3 req)",
+                ),
+                (
+                    "Current week TPS/RPS",
+                    "0.048 tok/s  0.000017 req/s  (14,400 tokens, 5 req)",
+                ),
+                (
+                    "Current month TPS/RPS",
+                    "0.019 tok/s  0.000006 req/s  (28,800 tokens, 9 req)",
+                ),
+            ],
+        )
+
+    def test_overview_renders_current_usage_rate_indicators(self) -> None:
+        state = TuiState(
+            dataset=dataset(
+                loaded_at=datetime.fromisoformat("2026-06-02T01:00:00+00:00")
+            ),
+        )
+        stdscr = FakeStdScr([], size=(40, 160))
+        ui = CursesUi(stdscr, state, TuiOptions(codex_home=Path("/tmp")))
+
+        ui.render_overview(40, 160)
+
+        rendered = [text for _y, _x, text, _attr in stdscr.writes]
+        labels = {text.strip() for text in rendered}
+        self.assertIn("Current 5h TPS/RPS", labels)
+        self.assertIn("Current day TPS/RPS", labels)
+        self.assertIn("Current week TPS/RPS", labels)
+        self.assertIn("Current month TPS/RPS", labels)
+        self.assertTrue(any("tok/s" in text and "req/s" in text for text in rendered))
+
     def test_prediction_algorithm_cycles_from_misc_setting(self) -> None:
         prediction = cycle_prediction_algorithm(PredictionConfig())
         self.assertEqual(prediction.algorithm, "previous_period")
@@ -874,7 +1033,11 @@ class TuiStateTests(unittest.TestCase):
         self.assertIsNone(plain[0].color_index)
 
 
-def dataset(extra: bool = False, count: int | None = None) -> UsageDataset:
+def dataset(
+    extra: bool = False,
+    count: int | None = None,
+    loaded_at: datetime | None = None,
+) -> UsageDataset:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         if count is not None:
@@ -901,7 +1064,7 @@ def dataset(extra: bool = False, count: int | None = None) -> UsageDataset:
         return UsageDataset(
             sessions=tuple(sessions),
             codex_home=root,
-            loaded_at=datetime.now(timezone.utc),
+            loaded_at=loaded_at or datetime.now(timezone.utc),
             sqlite_available=False,
         )
 
@@ -913,6 +1076,7 @@ def session(
     cwd: str,
     updated_at: str,
     root: Path,
+    request_count: int = 0,
 ) -> SessionUsage:
     updated = datetime.fromisoformat(updated_at)
     return SessionUsage(
@@ -931,6 +1095,7 @@ def session(
             updated_at=updated,
         ),
         has_token_event=True,
+        request_count=request_count,
     )
 
 
