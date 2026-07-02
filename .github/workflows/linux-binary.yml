@@ -16,52 +16,32 @@ jobs:
   linux-binary:
     name: Linux x86_64 standalone binary
     runs-on: ubuntu-22.04
+    env:
+      LINUX_BUILD_IMAGE: python:3.12-bullseye
+      LINUX_BUILD_PYTHON: python
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install build tools
+      - name: Build standalone executable on glibc 2.31 baseline
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install pyinstaller
-          python -m pip install .
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e PYTHON_BIN="${LINUX_BUILD_PYTHON}" \
+            -e PIP_INSTALL_ARGS=--user \
+            -e RUNNER_TEMP=/tmp \
+            -v "$PWD:/io" \
+            -w /io \
+            "${LINUX_BUILD_IMAGE}" \
+            /bin/bash packaging/build-linux-binary.sh
+          cat dist/linux-binary.env >> "$GITHUB_ENV"
 
-      - name: Run tests
-        run: PYTHONPATH=src python -m unittest discover -s tests
-
-      - name: Build standalone executable
-        run: |
-          python -m PyInstaller \
-            --clean \
-            --onefile \
-            --name codex-token-usage \
-            --collect-data codex_token_usage \
-            packaging/pyinstaller_entry.py
-
-      - name: Verify bundled executable
+      - name: Verify bundled executable on runner
         run: |
           ./dist/codex-token-usage --help
           ./dist/codex-token-usage --format json --codex-home "$RUNNER_TEMP/missing-codex-home"
-
-      - name: Package installable archive
-        run: |
-          set -eu
-          version="$(python -c 'import codex_token_usage; print(codex_token_usage.__version__)')"
-          package="codex-token-usage-${version}-linux-x86_64"
-          package_dir="dist/${package}"
-          mkdir -p "$package_dir/bin"
-          cp dist/codex-token-usage "$package_dir/bin/codex-token-usage"
-          cp packaging/install-linux.sh "$package_dir/install.sh"
-          chmod 755 "$package_dir/bin/codex-token-usage" "$package_dir/install.sh"
-          tar -C dist -czf "dist/${package}.tar.gz" "$package"
-          sha256sum "dist/${package}.tar.gz" "dist/codex-token-usage" > "dist/${package}.sha256"
-          echo "PACKAGE_NAME=${package}" >> "$GITHUB_ENV"
 
       - name: Upload installable archive
         uses: actions/upload-artifact@v4

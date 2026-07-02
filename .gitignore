@@ -8,5 +8,6 @@ __pycache__/
 htmlcov/
 build/
 dist/
+*.spec
 .venv/
 venv/
