@@ -17,7 +17,13 @@ from codex_token_usage.models import (
     UsageEvent,
 )
 from codex_token_usage.pricing import ModelPrice
-from codex_token_usage.theme import DisplayConfig, PRESET_NAMES, ThemeConfig, themed_bar_segments
+from codex_token_usage.theme import (
+    DisplayConfig,
+    PRESET_NAMES,
+    ThemeConfig,
+    theme_palette,
+    themed_bar_segments,
+)
 from codex_token_usage.tui import (
     ABOUT_DESCRIPTION,
     OFFBOARD_MESSAGE,
@@ -73,6 +79,7 @@ from codex_token_usage.tui import (
 from codex_token_usage.tui.secret_codes import (
     EFFECT_BIRTHDAY,
     EFFECT_EMERGENCY,
+    EFFECT_CLAUDE,
     EFFECT_HEART,
     EFFECT_NYAN,
     EFFECT_PWNED,
@@ -528,6 +535,8 @@ class TuiStateTests(unittest.TestCase):
             "1976": EFFECT_HEART,
             "2011": EFFECT_NYAN,
             "iamdeveloper": EFFECT_TRANS_FLAG,
+            "claude": EFFECT_CLAUDE,
+            "ClaUdE": EFFECT_CLAUDE,
             "pwned": EFFECT_PWNED,
         }
         for code, expected in expected_effects.items():
@@ -545,7 +554,7 @@ class TuiStateTests(unittest.TestCase):
                     ui.handle_key(SECRET_CODE_KEY)
 
                 rendered.assert_called_once_with(ui, expected)
-                self.assertEqual(ui.state.status, "keep")
+        self.assertEqual(ui.state.status, "keep")
 
     def test_secret_effect_stays_until_q_or_esc(self) -> None:
         for dismiss_key in (ord("q"), 27):
@@ -562,7 +571,7 @@ class TuiStateTests(unittest.TestCase):
                     ui.handle_key(SECRET_CODE_KEY)
 
                 self.assertIn("     *     ", [write[2] for write in stdscr.writes])
-                self.assertEqual(ui.state.status, "keep")
+        self.assertEqual(ui.state.status, "keep")
 
     def test_cake_and_nyan_loop_until_dismissal(self) -> None:
         cases = {
@@ -681,6 +690,50 @@ class TuiStateTests(unittest.TestCase):
             ui.handle_key(SECRET_CODE_KEY)
 
         self.assertIn("root@hacker:~# ", [write[2] for write in stdscr.writes])
+        self.assertEqual(ui.state.status, "keep")
+
+    def test_clawd_secret_code_renders_flag_dance(self) -> None:
+        keys = [ord(char) for char in "claude"] + [10, ord("q")]
+        stdscr = FakeStdScr(keys, size=(28, 120))
+        theme = ThemeConfig(enabled=True, preset="rainbow")
+        palette = theme_palette(theme)
+        ui = CursesUi(
+            stdscr,
+            TuiState(dataset=dataset(), status="keep"),
+            TuiOptions(codex_home=Path("/tmp"), theme=theme),
+        )
+        if not palette:
+            self.fail("rainbow palette missing from test fixture")
+
+        def preview_attr(rgb: tuple[int, int, int], base_attr: int = 0) -> int:
+            if rgb == (255, 255, 255):
+                return base_attr | 0x200
+            if rgb in palette:
+                return base_attr | (1024 + palette.index(rgb))
+            return base_attr
+
+        ui.preview_attr = preview_attr
+
+        ui.handle_key(SECRET_CODE_KEY)
+
+        rendered_chars = {text for _y, _x, text, _attr in stdscr.writes}
+        self.assertTrue(any("/" in text for text in rendered_chars))
+        self.assertTrue(any("0" in text for text in rendered_chars))
+        self.assertTrue(any("(" in text for text in rendered_chars))
+        self.assertTrue(any(")" in text for text in rendered_chars))
+        self.assertTrue(any("\\" in text for text in rendered_chars))
+
+        mascot_attrs = {
+            _attr
+            for _y, _x, text, _attr in stdscr.writes
+            if any(char != " " for char in text)
+            and text.strip()
+        }
+        self.assertTrue(mascot_attrs)
+        self.assertTrue(
+            any(_attr & 0x200 == 0 for _attr in mascot_attrs),
+            "Expected non-white Clawd rendering using selected flag colors",
+        )
         self.assertEqual(ui.state.status, "keep")
 
     def test_trans_flag_waves_vertically_until_dismissal(self) -> None:
