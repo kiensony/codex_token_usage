@@ -24,14 +24,20 @@ class ViewOverlayMixin:
             f"{self.keys_for_action('move_down')} / {self.keys_for_action('move_up')}  move selection",
             f"{self.keys_for_action('page_down')} / {self.keys_for_action('page_up')}  move by page",
             f"{self.keys_for_action('select_first')} / {self.keys_for_action('select_last')}  jump to top or bottom",
-            f"{self.keys_for_action('open_details')}  open selected session details",
+            (
+                f"{self.keys_for_action('open_details')}  "
+                "open selected session/project details"
+            ),
             (
                 f"{self.keys_for_action('back')} / {self.keys_for_action('back_or_quit')}  "
                 "return from details"
             ),
             f"{self.keys_for_action('cycle_sort')}  cycle sort field",
             f"{self.keys_for_action('toggle_sort_direction')}  reverse sort direction",
-            f"{self.keys_for_action('cycle_statistic_display_mode')}  change Statistic display mode",
+            (
+                f"{self.keys_for_action('cycle_display_mode')}  "
+                "change Statistic/Project display mode"
+            ),
             f"{self.keys_for_action('filter')}  filter sessions; Esc clears/cancels filter input",
             f"{self.keys_for_action('cycle_date_preset')}  cycle date range preset",
             f"{self.keys_for_action('show_all_time')}  show all time",

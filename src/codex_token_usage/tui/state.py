@@ -68,7 +68,15 @@ REASONING_LEVEL_RANK = {
 }
 DATE_PRESETS = ("all", "today", "7d", "30d", "90d")
 STATISTIC_DISPLAY_MODES = ("table", "line")
+PROJECT_DISPLAY_MODES = ("projects", "models")
 DEFAULT_PAGE_SIZE = 10
+
+
+@dataclass(frozen=True)
+class ProjectModelRows:
+    project: ReportRow
+    models: tuple[ReportRow, ...]
+
 
 @dataclass(frozen=True)
 class TuiOptions:
@@ -93,6 +101,7 @@ class TuiState:
     view_index: int = 0
     previous_view_index: int = 0
     selected_index: int = 0
+    selected_project_index: int = 0
     sort_index: int = 0
     sort_descending: bool = True
     filter_text: str = ""
@@ -106,6 +115,7 @@ class TuiState:
     today: date | None = None
     pricing: PricingConfig = PricingConfig()
     statistic_display_mode: str = "table"
+    project_display_mode: str = "projects"
 
     @property
 
@@ -138,6 +148,15 @@ class TuiState:
         return self.view
 
     def move_selection(self, delta: int) -> "TuiState":
+        if self.tab_view == "projects":
+            projects = self.project_model_rows()
+            if not projects:
+                return replace(self, selected_project_index=0)
+            selected = min(
+                max(self.selected_project_index + delta, 0),
+                len(projects) - 1,
+            )
+            return replace(self, selected_project_index=selected)
         sessions = self.visible_sessions()
         if not sessions:
             return replace(self, selected_index=0)
@@ -148,15 +167,30 @@ class TuiState:
         return self.move_selection(delta * max(1, page_size))
 
     def select_first(self) -> "TuiState":
+        if self.tab_view == "projects":
+            return replace(self, selected_project_index=0)
         return replace(self, selected_index=0)
 
     def select_last(self) -> "TuiState":
+        if self.tab_view == "projects":
+            projects = self.project_model_rows()
+            if not projects:
+                return replace(self, selected_project_index=0)
+            return replace(self, selected_project_index=len(projects) - 1)
         sessions = self.visible_sessions()
         if not sessions:
             return replace(self, selected_index=0)
         return replace(self, selected_index=len(sessions) - 1)
 
     def open_details(self) -> "TuiState":
+        if self.tab_view == "projects":
+            if self.selected_project() is None:
+                return self
+            return replace(
+                self,
+                view_index=VIEWS.index("details"),
+                previous_view_index=VIEWS.index(self.tab_view),
+            )
         if self.visible_sessions():
             return replace(
                 self,
@@ -176,6 +210,7 @@ class TuiState:
             self,
             sort_index=next_index,
             selected_index=0,
+            selected_project_index=0,
             status=f"sort: {SORT_FIELDS[next_index]} {self.sort_direction_label}",
         )
 
@@ -186,14 +221,25 @@ class TuiState:
             self,
             sort_descending=next_descending,
             selected_index=0,
+            selected_project_index=0,
             status=f"sort direction: {direction}",
         )
 
-    def cycle_statistic_display_mode(self) -> "TuiState":
+    def cycle_display_mode(self) -> "TuiState":
+        if self.view == "projects":
+            index = PROJECT_DISPLAY_MODES.index(self.project_display_mode)
+            next_mode = PROJECT_DISPLAY_MODES[
+                (index + 1) % len(PROJECT_DISPLAY_MODES)
+            ]
+            return replace(
+                self,
+                project_display_mode=next_mode,
+                status=f"Project display: {next_mode}",
+            )
         if self.view != "statistic":
             return replace(
                 self,
-                status="Statistic display mode is available on Statistic",
+                status="Display mode is available on Statistic or By Project",
             )
         index = STATISTIC_DISPLAY_MODES.index(self.statistic_display_mode)
         next_mode = STATISTIC_DISPLAY_MODES[(index + 1) % len(STATISTIC_DISPLAY_MODES)]
@@ -211,10 +257,22 @@ class TuiState:
     def set_filter(self, value: str) -> "TuiState":
         value = value.strip()
         status = f"filter: {value}" if value else "filter cleared"
-        return replace(self, filter_text=value, selected_index=0, status=status)
+        return replace(
+            self,
+            filter_text=value,
+            selected_index=0,
+            selected_project_index=0,
+            status=status,
+        )
 
     def clear_filter(self) -> "TuiState":
-        return replace(self, filter_text="", selected_index=0, status="filter cleared")
+        return replace(
+            self,
+            filter_text="",
+            selected_index=0,
+            selected_project_index=0,
+            status="filter cleared",
+        )
 
     def cancel_filter(self) -> "TuiState":
         return replace(self, status="filter canceled")
@@ -226,6 +284,7 @@ class TuiState:
             since=None,
             until=None,
             selected_index=0,
+            selected_project_index=0,
             status="date range: all time",
         )
 
@@ -248,6 +307,7 @@ class TuiState:
             since=since,
             until=until,
             selected_index=0,
+            selected_project_index=0,
             status=f"date range: {'all time' if preset == 'all' else preset}",
         )
 
@@ -263,19 +323,29 @@ class TuiState:
             since=since,
             until=until,
             selected_index=0,
+            selected_project_index=0,
             status=f"range: {since}..{until}",
         )
 
     def reload(self, loader: Callable[[date | None, date | None], UsageDataset]) -> "TuiState":
         selected_session = self.selected_session()
         selected_id = selected_session.session_id if selected_session else None
+        selected_project_key = None
+        if self.tab_view == "projects":
+            selected_project = self.selected_project()
+            selected_project_key = (
+                selected_project.project.key if selected_project else None
+            )
         dataset = loader(self.since, self.until)
         next_state = replace(
             self,
             dataset=dataset,
             selected_index=0,
+            selected_project_index=0,
             status=f"reloaded {len(dataset.sessions)} sessions",
         )
+        if selected_project_key is not None:
+            next_state = next_state.select_project_key(selected_project_key)
         if selected_id is None:
             return next_state
         return next_state.select_session_id(selected_id)
@@ -284,6 +354,12 @@ class TuiState:
         for index, session in enumerate(self.visible_sessions()):
             if session.session_id == session_id:
                 return replace(self, selected_index=index)
+        return self
+
+    def select_project_key(self, project_key: str) -> "TuiState":
+        for index, project in enumerate(self.project_model_rows()):
+            if project.project.key == project_key:
+                return replace(self, selected_project_index=index)
         return self
 
     def quit(self) -> "TuiState":
@@ -323,6 +399,13 @@ class TuiState:
         index = min(self.selected_index, len(sessions) - 1)
         return sessions[index]
 
+    def selected_project(self) -> ProjectModelRows | None:
+        projects = self.project_model_rows()
+        if not projects:
+            return None
+        index = min(self.selected_project_index, len(projects) - 1)
+        return projects[index]
+
     def daily_rows(self):
         dataset = replace(self.dataset, sessions=tuple(self.visible_sessions()))
         return self.sorted_report_rows(
@@ -352,6 +435,40 @@ class TuiState:
         return self.sorted_report_rows(
             make_report_rows(dataset, group_by="project", pricing=self.pricing)
         )
+
+    def project_model_rows(self) -> list[ProjectModelRows]:
+        sessions = self.visible_sessions()
+        dataset = replace(self.dataset, sessions=tuple(sessions))
+        project_rows = self.sorted_report_rows(
+            make_report_rows(dataset, group_by="project", pricing=self.pricing)
+        )
+        sessions_by_project: dict[str, list[SessionUsage]] = {}
+        for session in sessions:
+            sessions_by_project.setdefault(session.cwd, []).append(session)
+        return [
+            ProjectModelRows(
+                project=project,
+                models=tuple(
+                    sorted(
+                        make_report_rows(
+                            replace(
+                                self.dataset,
+                                sessions=tuple(
+                                    sessions_by_project.get(project.key, ())
+                                ),
+                            ),
+                            group_by="model",
+                            pricing=self.pricing,
+                        ),
+                        key=lambda row: (
+                            -row.tokens.total_tokens,
+                            row.key.casefold(),
+                        ),
+                    )
+                ),
+            )
+            for project in project_rows
+        ]
 
     def filtered_totals(self) -> TokenBreakdown:
         total = TokenBreakdown.empty()

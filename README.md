@@ -40,7 +40,7 @@ Inside the TUI, `c` opens a curses settings screen for theme, display columns, m
 Available presets are loaded from HyFetch's preset table, including `rainbow`, `transgender`, `nonbinary`, `abrosexual`, `aromantic`, `intersex`, `progress`, `baker`, `band`, and many more. Compatibility aliases include `trans`, `nonhuman-unit`, and `ynullflux`.
 The TUI applies the selected flag palette to global chrome, headings, selected rows, and usage bars when curses reports color support. Table, JSON, and CSV output stay uncolored.
 
-Project/folder usage groups sessions by their exact recorded working directory (`cwd`). Existing `cwd` reports remain available for compatibility, and the TUI includes a `By Project` tab with the same aggregate columns and sorting controls as the date, week, month, and hour views.
+Project/folder usage groups sessions by their exact recorded working directory (`cwd`). Existing `cwd` reports remain available for compatibility, and the TUI includes a `By Project` tab with the same aggregate columns and sorting controls as the date, week, month, and hour views. By Project defaults to one row per project; press `m` to toggle model rows inline, or press `Enter` on a selected project to open a detail screen with the model breakdown.
 
 Display settings can show or hide cached tokens, cached %, estimated API cost, reasoning level, cache miss, reasoning tokens, model, and cwd/title columns, and set the session table model column width to `auto` or a fixed 8-40 character width. Appearance settings can change the flag palette with a paged flag picker, color mode, lightness, accent line, and themed usage bars. Estimated cost uses standard OpenAI per-1M-token rates for known models, with any custom rates from setup overriding the built-in table. Unknown models show `n/a`; mixed aggregates with some unknown model rates are marked with `*`.
 
@@ -82,7 +82,7 @@ Default TUI keys:
 - `A`: show all time
 - `[` / `]`: move the active date range backward or forward
 - `r`: reload local data
-- `m`: change Statistic display mode
+- `m`: change Statistic or By Project display mode
 - `c`: open TUI settings for theme, display columns, model width, model rates, and prediction algorithm
 - `a`: show about this software
 - `?`: show help

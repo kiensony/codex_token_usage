@@ -21,6 +21,7 @@ class KeybindingTests(unittest.TestCase):
 
         self.assertEqual(config.labels("open_about"), ("a",))
         self.assertEqual(config.labels("show_all_time"), ("A",))
+        self.assertEqual(config.labels("cycle_display_mode"), ("m",))
         self.assertEqual(config.labels("cycle_statistic_display_mode"), ("m",))
         self.assertEqual(config.labels("quit"), ("q", "Ctrl+C"))
         all_default_labels = {
@@ -35,6 +36,13 @@ class KeybindingTests(unittest.TestCase):
 
         self.assertEqual(config.labels("open_about"), ("a",))
         self.assertEqual(config.labels("show_all_time"), ("A",))
+
+    def test_old_statistic_display_mode_keybinding_migrates(self) -> None:
+        config = parse_keybindings_config(
+            {"keybindings": {"cycle_statistic_display_mode": ["x"]}}
+        )
+
+        self.assertEqual(config.labels("cycle_display_mode"), ("x",))
 
     def test_parse_named_printable_and_control_keys(self) -> None:
         self.assertEqual(normalize_key_label("PgUp"), "PageUp")

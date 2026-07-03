@@ -75,6 +75,7 @@ from .settings_model import (
 from .state import (
     DATE_PRESETS,
     DEFAULT_PAGE_SIZE,
+    PROJECT_DISPLAY_MODES,
     REASONING_LEVEL_RANK,
     SORT_FIELDS,
     STATISTIC_DISPLAY_MODES,

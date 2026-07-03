@@ -191,6 +191,8 @@ class ViewRendererMixin(ViewOverlayMixin):
         filters.append(
             f"sort={self.state.sort_field} {self.state.sort_direction_label}"
         )
+        if self.state.view == "projects":
+            filters.append(f"mode={self.state.project_display_mode}")
         self.render_themed_text(
             2,
             0,
@@ -315,7 +317,7 @@ class ViewRendererMixin(ViewOverlayMixin):
         y += 1
         available = max(0, last_y - y + 1)
         chart_height = max(1, min(6, (available - 9) // max(1, len(series_rows))))
-        chart_width = max(1, min(72, width - 1))
+        chart_width = max(1, width - 1)
         for index, series in enumerate(series_rows):
             if y > last_y:
                 break
@@ -352,16 +354,60 @@ class ViewRendererMixin(ViewOverlayMixin):
         rows = self.state.hourly_rows()
         self.render_usage_rows("hour", rows, height, width)
     def render_projects(self, height: int, width: int) -> None:
-        rows = self.state.project_rows()
-        max_label = max((len(row.key) for row in rows), default=len("project"))
-        label_width = min(max(16, max_label), max(16, width // 3))
-        self.render_usage_rows(
-            "project",
-            rows,
-            height,
-            width,
-            label_width=label_width,
+        rows = self.state.project_model_rows()
+        max_label = max(
+            (len(row.project.key) for row in rows),
+            default=len("project"),
         )
+        label_width = min(max(16, max_label), max(16, width // 3))
+        max_total = max(
+            (row.project.tokens.total_tokens for row in rows),
+            default=0,
+        )
+        selected_index = min(self.state.selected_project_index, len(rows) - 1)
+        header = (
+            f" {'project':<{label_width}} {'usage':<14} "
+            f"{self.aggregate_header_fields()}"
+        )
+        self.render_themed_text(4, 0, header[: max(0, width - 1)], curses.A_BOLD)
+        rows_available = max(0, height - 7)
+        y = 5
+        rendered = 0
+        show_models = self.state.project_display_mode == "models"
+        for project_index, row in enumerate(rows):
+            if rendered >= rows_available:
+                break
+            selected = project_index == selected_index
+            attr = self.theme_attr(project_index, curses.A_REVERSE) if selected else 0
+            self.render_usage_row(
+                y,
+                "project",
+                row.project,
+                max_total,
+                width,
+                label_width,
+                marker=">" if selected else " ",
+                attr=attr,
+            )
+            y += 1
+            rendered += 1
+            if not show_models:
+                continue
+            for model_row in row.models:
+                if rendered >= rows_available:
+                    break
+                self.render_usage_row(
+                    y,
+                    "project",
+                    model_row,
+                    max_total,
+                    width,
+                    label_width,
+                    row_key=f"  {model_row.key}",
+                    marker=" ",
+                )
+                y += 1
+                rendered += 1
     def aggregate_header_fields(self) -> str:
         fields: list[tuple[str, int]] = [
             ("sessions", 8),
@@ -464,21 +510,54 @@ class ViewRendererMixin(ViewOverlayMixin):
             header += " forecast"
         self.render_themed_text(4, 0, header[: max(0, width - 1)], curses.A_BOLD)
         for offset, row in enumerate(rows[: max(0, height - 7)], start=5):
-            row_key = truncate(row.key, label_width)
-            prefix = f"{row_key:<{label_width}} "
-            suffix = " " + self.aggregate_value_fields(row)
-            status = usage_row_forecast_status(label, row.key, forecast_window)
-            if status:
-                suffix += f" {status}"
-            self.safe_addstr(offset, 0, prefix)
-            self.render_themed_bar(
+            self.render_usage_row(
                 offset,
-                len(prefix),
-                row.tokens.total_tokens,
+                label,
+                row,
                 max_total,
-                14,
+                width,
+                label_width,
+                forecast_window,
             )
-            self.safe_addstr(offset, len(prefix) + 14, suffix)
+
+    def render_usage_row(
+        self,
+        y: int,
+        label: str,
+        row,
+        max_total: int,
+        width: int,
+        label_width: int,
+        forecast_window: ForecastWindow | None = None,
+        row_key: str | None = None,
+        marker: str | None = None,
+        attr: int = 0,
+    ) -> None:
+        key = row.key if row_key is None else row_key
+        display_key = truncate(key, label_width)
+        if marker is None:
+            prefix = f"{display_key:<{label_width}} "
+        else:
+            prefix = f"{marker}{display_key:<{label_width}} "
+        suffix = " " + self.aggregate_value_fields(row)
+        status = usage_row_forecast_status(label, row.key, forecast_window)
+        if status:
+            suffix += f" {status}"
+        self.safe_addstr(y, 0, prefix, attr)
+        self.render_themed_bar(
+            y,
+            len(prefix),
+            row.tokens.total_tokens,
+            max_total,
+            14,
+            attr,
+        )
+        self.safe_addstr(
+            y,
+            len(prefix) + 14,
+            suffix[: max(0, width - len(prefix) - 14)],
+            attr,
+        )
     def render_sessions(self, height: int, width: int) -> None:
         sessions = self.state.visible_sessions()
         max_total = max((session.tokens.total_tokens for session in sessions), default=0)
@@ -524,6 +603,9 @@ class ViewRendererMixin(ViewOverlayMixin):
             )
             self.safe_addstr(y, len(prefix) + 10, suffix, attr)
     def render_details(self, height: int, width: int) -> None:
+        if self.state.tab_view == "projects":
+            self.render_project_details(height, width)
+            return
         session = self.state.selected_session()
         if session is None:
             self.safe_addstr(2, 0, "No session selected.")
@@ -559,3 +641,56 @@ class ViewRendererMixin(ViewOverlayMixin):
                 ),
             )
         self.render_key_values(4, rows, width, height)
+
+    def render_project_details(self, height: int, width: int) -> None:
+        project = self.state.selected_project()
+        if project is None:
+            self.safe_addstr(2, 0, "No project selected.")
+            return
+        tokens = project.project.tokens
+        rows = [
+            ("Project", project.project.key),
+            ("Sessions", format_int(project.project.sessions)),
+            ("Models", format_int(len(project.models))),
+            ("Total", format_int(tokens.total_tokens)),
+            ("Input", format_int(tokens.input_tokens)),
+            ("Output", format_int(tokens.output_tokens)),
+            ("Cached input", format_int(tokens.cached_input_tokens)),
+            ("Cache miss input", format_int(tokens.cache_miss_input_tokens)),
+            ("Reasoning output", format_int(tokens.reasoning_output_tokens)),
+        ]
+        if self.options.display.show_cached_percent:
+            rows.insert(
+                7,
+                ("Cached input %", format_percent(tokens.cached_input_percent)),
+            )
+        if self.options.display.show_estimated_cost:
+            rows.insert(
+                4,
+                ("Estimated API cost", format_cost(project.project.estimated_cost)),
+            )
+        summary_count = min(len(rows), max(0, height - 12))
+        self.render_key_values(4, rows[:summary_count], width, height)
+        table_y = 4 + summary_count + 1
+        if table_y >= height - 2:
+            return
+        model_width = min(
+            max(16, max((len(row.key) for row in project.models), default=5)),
+            max(16, width // 3),
+        )
+        header = (
+            f"{'model':<{model_width}} {'usage':<14} "
+            f"{self.aggregate_header_fields()}"
+        )
+        self.render_themed_text(table_y, 0, header[: max(0, width - 1)], curses.A_BOLD)
+        max_total = max((row.tokens.total_tokens for row in project.models), default=0)
+        rows_available = max(0, height - table_y - 2)
+        for offset, row in enumerate(project.models[:rows_available], start=table_y + 1):
+            self.render_usage_row(
+                offset,
+                "model",
+                row,
+                max_total,
+                width,
+                model_width,
+            )

@@ -21,7 +21,7 @@ KEYBINDING_ACTIONS = (
     "shift_date_backward",
     "shift_date_forward",
     "reload",
-    "cycle_statistic_display_mode",
+    "cycle_display_mode",
     "open_settings",
     "open_about",
     "filter",
@@ -30,6 +30,10 @@ KEYBINDING_ACTIONS = (
     "back_or_quit",
     "quit",
 )
+
+KEYBINDING_ACTION_ALIASES = {
+    "cycle_statistic_display_mode": "cycle_display_mode",
+}
 
 KEYBINDING_ACTION_LABELS = {
     "next_view": "Next view",
@@ -48,7 +52,7 @@ KEYBINDING_ACTION_LABELS = {
     "shift_date_backward": "Shift date range backward",
     "shift_date_forward": "Shift date range forward",
     "reload": "Reload data",
-    "cycle_statistic_display_mode": "Cycle Statistic display mode",
+    "cycle_display_mode": "Display mode",
     "open_settings": "Open settings",
     "open_about": "Open about",
     "filter": "Filter sessions",
@@ -75,7 +79,7 @@ DEFAULT_KEYBINDINGS: dict[str, tuple[str, ...]] = {
     "shift_date_backward": ("[",),
     "shift_date_forward": ("]",),
     "reload": ("r",),
-    "cycle_statistic_display_mode": ("m",),
+    "cycle_display_mode": ("m",),
     "open_settings": ("c",),
     "open_about": ("a",),
     "filter": ("/",),
@@ -131,7 +135,12 @@ class KeybindingConfig:
         return values
 
     def labels(self, action: str) -> tuple[str, ...]:
+        action = canonical_keybinding_action(action)
         return self.as_dict()[action]
+
+
+def canonical_keybinding_action(action: str) -> str:
+    return KEYBINDING_ACTION_ALIASES.get(action, action)
 
 
 def parse_keybindings_config(raw: object) -> KeybindingConfig:
@@ -145,9 +154,13 @@ def parse_keybindings_config(raw: object) -> KeybindingConfig:
         raise ValueError("keybindings must be a JSON object")
 
     bindings = {action: labels for action, labels in DEFAULT_KEYBINDING_ITEMS}
-    for action, raw_labels in raw_keybindings.items():
+    for raw_action, raw_labels in raw_keybindings.items():
+        action = canonical_keybinding_action(str(raw_action))
         if action not in DEFAULT_KEYBINDINGS:
-            raise ValueError(f"unknown keybinding action: {action}")
+            display_action = str(raw_action)
+            if display_action != action:
+                display_action = f"{display_action} ({action})"
+            raise ValueError(f"unknown keybinding action: {display_action}")
         parsed_labels = parse_keybinding_value(raw_labels, action)
         if (
             action == "show_all_time"
@@ -155,7 +168,7 @@ def parse_keybindings_config(raw: object) -> KeybindingConfig:
             and "open_about" not in raw_keybindings
         ):
             parsed_labels = DEFAULT_KEYBINDINGS["show_all_time"]
-        bindings[str(action)] = parsed_labels
+        bindings[action] = parsed_labels
     return make_keybinding_config(bindings)
 
 
@@ -189,7 +202,12 @@ def normalize_key_labels(labels: tuple[str, ...], action: str) -> tuple[str, ...
 
 def make_keybinding_config(bindings: dict[str, tuple[str, ...]]) -> KeybindingConfig:
     complete = {action: labels for action, labels in DEFAULT_KEYBINDING_ITEMS}
-    complete.update(bindings)
+    complete.update(
+        {
+            canonical_keybinding_action(action): labels
+            for action, labels in bindings.items()
+        }
+    )
     validate_keybindings(complete)
     return KeybindingConfig(
         bindings=tuple((action, complete[action]) for action in KEYBINDING_ACTIONS)
@@ -201,6 +219,7 @@ def update_keybinding(
     action: str,
     labels: tuple[str, ...],
 ) -> KeybindingConfig:
+    action = canonical_keybinding_action(action)
     if action not in DEFAULT_KEYBINDINGS:
         raise ValueError(f"unknown keybinding action: {action}")
     bindings = config.as_dict()
@@ -209,6 +228,7 @@ def update_keybinding(
 
 
 def reset_keybinding(config: KeybindingConfig, action: str) -> KeybindingConfig:
+    action = canonical_keybinding_action(action)
     if action not in DEFAULT_KEYBINDINGS:
         raise ValueError(f"unknown keybinding action: {action}")
     bindings = config.as_dict()

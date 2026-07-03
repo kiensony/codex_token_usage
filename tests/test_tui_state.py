@@ -203,6 +203,81 @@ class TuiStateTests(unittest.TestCase):
             ["2026-06-02 00:00", "2026-06-01 00:00"],
         )
 
+    def test_project_model_rows_group_tokens_by_model(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            usage_dataset = UsageDataset(
+                sessions=(
+                    session(
+                        "repo-gpt-a",
+                        100,
+                        80,
+                        "/repo",
+                        "2026-06-01T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                    session(
+                        "repo-o4",
+                        40,
+                        30,
+                        "/repo",
+                        "2026-06-02T00:00:00+00:00",
+                        root,
+                        model="o4-mini",
+                    ),
+                    session(
+                        "repo-gpt-b",
+                        20,
+                        15,
+                        "/repo",
+                        "2026-06-03T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                    session(
+                        "other",
+                        200,
+                        100,
+                        "/other",
+                        "2026-06-04T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                ),
+                codex_home=root,
+                loaded_at=datetime.now(timezone.utc),
+                sqlite_available=False,
+            )
+        state = TuiState(dataset=usage_dataset)
+
+        projects = state.project_model_rows()
+        repo = next(row for row in projects if row.project.key == "/repo")
+
+        self.assertEqual(repo.project.sessions, 3)
+        self.assertEqual(repo.project.tokens.total_tokens, 160)
+        self.assertEqual([row.key for row in repo.models], ["gpt-5", "o4-mini"])
+        self.assertEqual([row.sessions for row in repo.models], [2, 1])
+        self.assertEqual([row.tokens.total_tokens for row in repo.models], [120, 40])
+
+    def test_project_cursor_opens_selected_project_details(self) -> None:
+        state = TuiState(dataset=dataset(), today=date(2026, 6, 29))
+        while state.view != "projects":
+            state = state.next_view()
+
+        self.assertEqual(state.selected_project().project.key, "/other")
+
+        state = state.move_selection(1)
+        self.assertEqual(state.selected_project().project.key, "/repo")
+
+        state = state.open_details()
+        self.assertEqual(state.view, "details")
+        self.assertEqual(state.tab_view, "projects")
+        self.assertEqual(state.selected_project().project.key, "/repo")
+
+        state = state.close_details()
+        self.assertEqual(state.view, "projects")
+
     def test_date_window_shift(self) -> None:
         state = TuiState(
             dataset=dataset(),
@@ -708,7 +783,7 @@ class TuiStateTests(unittest.TestCase):
 
         self.assertEqual(ui.state.status, "settings canceled")
 
-    def test_m_key_toggles_statistic_display_mode_only_on_statistic(self) -> None:
+    def test_m_key_toggles_supported_display_modes(self) -> None:
         ui = CursesUi(
             None,
             TuiState(dataset=dataset()),
@@ -720,7 +795,7 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(ui.state.statistic_display_mode, "table")
         self.assertEqual(
             ui.state.status,
-            "Statistic display mode is available on Statistic",
+            "Display mode is available on Statistic or By Project",
         )
 
         ui.state = ui.state.next_view()
@@ -735,6 +810,19 @@ class TuiStateTests(unittest.TestCase):
 
         self.assertEqual(ui.state.statistic_display_mode, "table")
         self.assertEqual(ui.state.status, "Statistic display: table")
+
+        while ui.state.view != "projects":
+            ui.state = ui.state.next_view()
+
+        ui.handle_key(ord("m"))
+
+        self.assertEqual(ui.state.project_display_mode, "models")
+        self.assertEqual(ui.state.status, "Project display: models")
+
+        ui.handle_key(ord("m"))
+
+        self.assertEqual(ui.state.project_display_mode, "projects")
+        self.assertEqual(ui.state.status, "Project display: projects")
 
     def test_curses_ui_captures_keybindings(self) -> None:
         ui = CursesUi(
@@ -1083,6 +1171,179 @@ class TuiStateTests(unittest.TestCase):
         self.assertTrue(any("rps" in text and "tpr" in text for text in rendered))
         self.assertTrue(any("Last hour" in text for text in rendered))
 
+    def test_project_view_defaults_to_project_only_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            usage_dataset = UsageDataset(
+                sessions=(
+                    session(
+                        "repo-gpt",
+                        100,
+                        80,
+                        "/repo",
+                        "2026-06-01T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                    session(
+                        "repo-o4",
+                        40,
+                        30,
+                        "/repo",
+                        "2026-06-02T00:00:00+00:00",
+                        root,
+                        model="o4-mini",
+                    ),
+                    session(
+                        "other",
+                        200,
+                        100,
+                        "/other",
+                        "2026-06-03T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                ),
+                codex_home=root,
+                loaded_at=datetime.now(timezone.utc),
+                sqlite_available=False,
+            )
+        state = TuiState(dataset=usage_dataset)
+        while state.view != "projects":
+            state = state.next_view()
+        stdscr = FakeStdScr([], size=(60, 160))
+        ui = CursesUi(stdscr, state, TuiOptions(codex_home=Path("/tmp")))
+
+        ui.render()
+
+        rendered = [text for _y, _x, text, _attr in stdscr.writes]
+        labels_by_y = {
+            y: text
+            for y, x, text, _attr in stdscr.writes
+            if x == 0 and y >= 5
+        }
+        self.assertTrue(
+            any(text.startswith(">/other") for text in labels_by_y.values())
+        )
+        self.assertTrue(
+            any(text.startswith(" /repo") for text in labels_by_y.values())
+        )
+        self.assertFalse(any("gpt-5" in text for text in labels_by_y.values()))
+        self.assertFalse(any("o4-mini" in text for text in labels_by_y.values()))
+        self.assertTrue(any("mode=projects" in text for text in rendered))
+
+    def test_project_view_can_render_indented_model_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            usage_dataset = UsageDataset(
+                sessions=(
+                    session(
+                        "repo-gpt",
+                        100,
+                        80,
+                        "/repo",
+                        "2026-06-01T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                    session(
+                        "repo-o4",
+                        40,
+                        30,
+                        "/repo",
+                        "2026-06-02T00:00:00+00:00",
+                        root,
+                        model="o4-mini",
+                    ),
+                    session(
+                        "other",
+                        200,
+                        100,
+                        "/other",
+                        "2026-06-03T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                ),
+                codex_home=root,
+                loaded_at=datetime.now(timezone.utc),
+                sqlite_available=False,
+            )
+        state = TuiState(dataset=usage_dataset)
+        while state.view != "projects":
+            state = state.next_view()
+        state = state.cycle_display_mode()
+        stdscr = FakeStdScr([], size=(60, 160))
+        ui = CursesUi(stdscr, state, TuiOptions(codex_home=Path("/tmp")))
+
+        ui.render()
+
+        rendered = [text for _y, _x, text, _attr in stdscr.writes]
+        labels_by_y = {
+            y: text
+            for y, x, text, _attr in stdscr.writes
+            if x == 0 and y >= 5
+        }
+        repo_y = next(
+            y for y, text in labels_by_y.items() if text.startswith(" /repo")
+        )
+        self.assertTrue(labels_by_y[repo_y + 1].startswith("   gpt-5"))
+        self.assertTrue(labels_by_y[repo_y + 2].startswith("   o4-mini"))
+        self.assertTrue(any("mode=models" in text for text in rendered))
+
+    def test_project_details_renders_model_breakdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            usage_dataset = UsageDataset(
+                sessions=(
+                    session(
+                        "repo-gpt",
+                        100,
+                        80,
+                        "/repo",
+                        "2026-06-01T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                    session(
+                        "repo-o4",
+                        40,
+                        30,
+                        "/repo",
+                        "2026-06-02T00:00:00+00:00",
+                        root,
+                        model="o4-mini",
+                    ),
+                    session(
+                        "other",
+                        200,
+                        100,
+                        "/other",
+                        "2026-06-03T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                ),
+                codex_home=root,
+                loaded_at=datetime.now(timezone.utc),
+                sqlite_available=False,
+            )
+        state = TuiState(dataset=usage_dataset)
+        while state.view != "projects":
+            state = state.next_view()
+        state = state.move_selection(1).open_details()
+        stdscr = FakeStdScr([], size=(60, 160))
+        ui = CursesUi(stdscr, state, TuiOptions(codex_home=Path("/tmp")))
+
+        ui.render()
+
+        rendered = [text for _y, _x, text, _attr in stdscr.writes]
+        self.assertTrue(any(text.strip() == "Project" for text in rendered))
+        self.assertTrue(any(text.strip() == "/repo" for text in rendered))
+        self.assertTrue(any(text.startswith("model") for text in rendered))
+        self.assertTrue(any(text.startswith("gpt-5") for text in rendered))
+        self.assertTrue(any(text.startswith("o4-mini") for text in rendered))
+
     def test_statistic_tab_renders_line_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1125,6 +1386,7 @@ class TuiStateTests(unittest.TestCase):
         self.assertTrue(any("TPM last 1h" in text for text in rendered))
         self.assertTrue(any("│" in text for text in chart_rows))
         self.assertTrue(any("┌" in text and "─" in text for text in chart_rows))
+        self.assertGreaterEqual(max(len(text) for text in chart_rows), 150)
         self.assertTrue(any("older" in text and "now" in text for text in rendered))
         self.assertTrue(
             any(
@@ -1333,6 +1595,7 @@ def session(
     root: Path,
     request_count: int = 0,
     usage_events: list[UsageEvent] | None = None,
+    model: str = "gpt-5",
 ) -> SessionUsage:
     updated = datetime.fromisoformat(updated_at)
     return SessionUsage(
@@ -1345,7 +1608,7 @@ def session(
         ),
         metadata=SessionMetadata(
             session_id=session_id,
-            model="gpt-5",
+            model=model,
             cwd=cwd,
             created_at=updated,
             updated_at=updated,
