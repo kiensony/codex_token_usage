@@ -44,7 +44,7 @@ Project/folder usage groups sessions by their exact recorded working directory (
 
 Display settings can show or hide cached tokens, cached %, estimated API cost, reasoning level, cache miss, reasoning tokens, model, and cwd/title columns, and set the session table model column width to `auto` or a fixed 8-40 character width. Appearance settings can change the flag palette with a paged flag picker, color mode, lightness, accent line, and themed usage bars. Estimated cost uses standard OpenAI per-1M-token rates for known models, with any custom rates from setup overriding the built-in table. Unknown models show `n/a`; mixed aggregates with some unknown model rates are marked with `*`.
 
-The overview shows projected usage for the next 5 hours, next day, next week, and next 30-day month. The prediction algorithm is configurable from the Misc settings tab: `recent_rate` projects from the current active usage rate, while `previous_period` assumes the next period will match the previous period's usage. The Misc tab can also set an automatic TUI refresh interval in seconds and customize the shutdown closing-frame interval; `0` or `off` disables auto refresh.
+The overview shows projected usage for the next 5 hours, next day, next week, and next 30-day month. The `Statistic` tab next to Overview shows RPS, RPM, RPH, TPS, TPM, TPH, and TPR (tokens per request) for complete rounded windows: last hour, last 5 hours, last day, last ISO week, and last calendar month. Press `m` on Statistic to switch between the table and a line-chart mode showing TPS over the last minute and TPM over the last hour. The prediction algorithm is configurable from the Misc settings tab: `recent_rate` projects from the current active usage rate, while `previous_period` assumes the next period will match the previous period's usage. The Misc tab can also set an automatic TUI refresh interval in seconds and customize the shutdown closing-frame interval; `0` or `off` disables auto refresh.
 
 Forecast warnings are disabled until a positive token limit is configured. The 5-hour forecast uses sessions active in the rolling last 5 hours and projects that recent rate across a 5-hour horizon. The weekly forecast uses the current ISO week-to-date rate and projects it through the end of the week. Table and graph reports append compact forecast and prediction sections, JSON reports include a top-level `forecast` object, and weekly CSV rows include forecast columns when limits are enabled.
 
@@ -82,6 +82,7 @@ Default TUI keys:
 - `A`: show all time
 - `[` / `]`: move the active date range backward or forward
 - `r`: reload local data
+- `m`: change Statistic display mode
 - `c`: open TUI settings for theme, display columns, model width, model rates, and prediction algorithm
 - `a`: show about this software
 - `?`: show help

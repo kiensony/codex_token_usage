@@ -31,6 +31,7 @@ class ViewOverlayMixin:
             ),
             f"{self.keys_for_action('cycle_sort')}  cycle sort field",
             f"{self.keys_for_action('toggle_sort_direction')}  reverse sort direction",
+            f"{self.keys_for_action('cycle_statistic_display_mode')}  change Statistic display mode",
             f"{self.keys_for_action('filter')}  filter sessions; Esc clears/cancels filter input",
             f"{self.keys_for_action('cycle_date_preset')}  cycle date range preset",
             f"{self.keys_for_action('show_all_time')}  show all time",

@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from .models import SessionMetadata, SessionUsage, TokenBreakdown, UsageDataset
+from .models import (
+    SessionMetadata,
+    SessionUsage,
+    TokenBreakdown,
+    UsageDataset,
+    UsageEvent,
+)
 
 
 TOKEN_COUNT_KEYS = ("token_count", "token_counts", "tokens")
@@ -99,6 +105,8 @@ def parse_session_jsonl(path: Path) -> SessionUsage:
     session_id = path.stem
     metadata = SessionMetadata(session_id=session_id)
     final_tokens: TokenBreakdown | None = None
+    previous_tokens = TokenBreakdown.empty()
+    usage_events: list[UsageEvent] = []
     has_token_event = False
     request_count = 0
     corrupt_lines = 0
@@ -126,6 +134,14 @@ def parse_session_jsonl(path: Path) -> SessionUsage:
                     request_count += 1
                     parsed_tokens = parse_token_breakdown(token_payload)
                     final_tokens = parsed_tokens.normalized()
+                    if event_time is not None:
+                        usage_events.append(
+                            UsageEvent(
+                                occurred_at=event_time,
+                                tokens=token_delta(final_tokens, previous_tokens),
+                            )
+                        )
+                    previous_tokens = final_tokens
     except OSError:
         corrupt_lines = 1
 
@@ -148,6 +164,7 @@ def parse_session_jsonl(path: Path) -> SessionUsage:
         metadata=metadata,
         has_token_event=has_token_event,
         request_count=request_count,
+        usage_events=tuple(usage_events),
         corrupt_lines=corrupt_lines,
     )
 
@@ -258,6 +275,22 @@ def parse_token_breakdown(data: dict[str, Any]) -> TokenBreakdown:
             ),
         ),
         total_tokens=first_int(data, ("total_tokens", "total", "tokens_used")),
+    )
+
+
+def token_delta(current: TokenBreakdown, previous: TokenBreakdown) -> TokenBreakdown:
+    return TokenBreakdown(
+        input_tokens=max(0, current.input_tokens - previous.input_tokens),
+        output_tokens=max(0, current.output_tokens - previous.output_tokens),
+        cached_input_tokens=max(
+            0,
+            current.cached_input_tokens - previous.cached_input_tokens,
+        ),
+        reasoning_output_tokens=max(
+            0,
+            current.reasoning_output_tokens - previous.reasoning_output_tokens,
+        ),
+        total_tokens=max(0, current.total_tokens - previous.total_tokens),
     )
 
 

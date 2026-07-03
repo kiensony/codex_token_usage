@@ -148,6 +148,8 @@ class CursesUi(ThemeRendererMixin, PromptMixin, SettingsScreenMixin, ViewRendere
         elif action == "reload":
             self.state = self.state.reload(self.reload_dataset)
             self.schedule_next_auto_refresh()
+        elif action == "cycle_statistic_display_mode":
+            self.state = self.state.cycle_statistic_display_mode()
         elif action == "open_settings":
             self.open_settings()
         elif action == "open_about":

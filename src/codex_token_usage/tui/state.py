@@ -14,6 +14,7 @@ from ..theme import DEFAULT_SHUTDOWN_SECONDS, DisplayConfig, ThemeConfig
 
 VIEWS = (
     "overview",
+    "statistic",
     "daily",
     "weekly",
     "monthly",
@@ -24,6 +25,7 @@ VIEWS = (
 )
 TAB_VIEWS = (
     "overview",
+    "statistic",
     "daily",
     "weekly",
     "monthly",
@@ -33,6 +35,7 @@ TAB_VIEWS = (
 )
 VIEW_LABELS = {
     "overview": "Overview",
+    "statistic": "Statistic",
     "daily": "By Date",
     "weekly": "By Week",
     "monthly": "By Month",
@@ -64,6 +67,7 @@ REASONING_LEVEL_RANK = {
     "high": 4,
 }
 DATE_PRESETS = ("all", "today", "7d", "30d", "90d")
+STATISTIC_DISPLAY_MODES = ("table", "line")
 DEFAULT_PAGE_SIZE = 10
 
 @dataclass(frozen=True)
@@ -101,6 +105,7 @@ class TuiState:
     status: str = ""
     today: date | None = None
     pricing: PricingConfig = PricingConfig()
+    statistic_display_mode: str = "table"
 
     @property
 
@@ -182,6 +187,20 @@ class TuiState:
             sort_descending=next_descending,
             selected_index=0,
             status=f"sort direction: {direction}",
+        )
+
+    def cycle_statistic_display_mode(self) -> "TuiState":
+        if self.view != "statistic":
+            return replace(
+                self,
+                status="Statistic display mode is available on Statistic",
+            )
+        index = STATISTIC_DISPLAY_MODES.index(self.statistic_display_mode)
+        next_mode = STATISTIC_DISPLAY_MODES[(index + 1) % len(STATISTIC_DISPLAY_MODES)]
+        return replace(
+            self,
+            statistic_display_mode=next_mode,
+            status=f"Statistic display: {next_mode}",
         )
 
     @property

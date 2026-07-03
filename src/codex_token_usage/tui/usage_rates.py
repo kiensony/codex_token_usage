@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Iterable
 
 from ..forecast import (
+    DAY_WINDOW,
     FIVE_HOUR_WINDOW,
+    WEEK_WINDOW,
     iso_week_start,
     normalize_datetime,
     sessions_in_window,
@@ -33,6 +35,64 @@ class UsageRateWindow:
     @property
     def requests_per_second(self) -> float:
         return self.requests / self.duration_seconds
+
+
+@dataclass(frozen=True)
+class StatisticUsageRateWindow:
+    label: str
+    window_start: datetime
+    window_end: datetime
+    tokens: int
+    requests: int
+
+    @property
+    def duration_seconds(self) -> float:
+        return max(1.0, (self.window_end - self.window_start).total_seconds())
+
+    @property
+    def duration_minutes(self) -> float:
+        return self.duration_seconds / 60
+
+    @property
+    def duration_hours(self) -> float:
+        return self.duration_seconds / 3600
+
+    @property
+    def rps(self) -> float:
+        return self.requests / self.duration_seconds
+
+    @property
+    def rpm(self) -> float:
+        return self.requests / self.duration_minutes
+
+    @property
+    def rph(self) -> float:
+        return self.requests / self.duration_hours
+
+    @property
+    def tps(self) -> float:
+        return self.tokens / self.duration_seconds
+
+    @property
+    def tpm(self) -> float:
+        return self.tokens / self.duration_minutes
+
+    @property
+    def tph(self) -> float:
+        return self.tokens / self.duration_hours
+
+    @property
+    def tpr(self) -> float:
+        if self.requests <= 0:
+            return 0.0
+        return self.tokens / self.requests
+
+
+@dataclass(frozen=True)
+class StatisticLineSeries:
+    label: str
+    bucket_label: str
+    values: tuple[float, ...]
 
 
 def current_usage_rate_rows(
@@ -68,6 +128,125 @@ def current_usage_rate_windows(
     return tuple(
         usage_rate_window(label, session_tuple, start, current)
         for label, start in windows
+    )
+
+
+def statistic_usage_rate_windows(
+    sessions: Iterable[SessionUsage],
+    as_of: datetime,
+) -> tuple[StatisticUsageRateWindow, ...]:
+    current = normalize_datetime(as_of)
+    hour_end = rounded_hour_start(current)
+    day_end = datetime.combine(current.date(), time.min, tzinfo=current.tzinfo)
+    week_end = iso_week_start(current)
+    month_end = datetime.combine(
+        current.date().replace(day=1),
+        time.min,
+        tzinfo=current.tzinfo,
+    )
+    session_tuple = tuple(sessions)
+    windows = (
+        ("Last hour", hour_end - timedelta(hours=1), hour_end),
+        ("Last 5h", hour_end - FIVE_HOUR_WINDOW, hour_end),
+        ("Last day", day_end - DAY_WINDOW, day_end),
+        ("Last week", week_end - WEEK_WINDOW, week_end),
+        ("Last month", previous_month_start(month_end), month_end),
+    )
+    return tuple(
+        statistic_usage_rate_window(label, session_tuple, start, end)
+        for label, start, end in windows
+    )
+
+
+def statistic_line_series(
+    sessions: Iterable[SessionUsage],
+    as_of: datetime,
+) -> tuple[StatisticLineSeries, StatisticLineSeries]:
+    current = normalize_datetime(as_of)
+    session_tuple = tuple(sessions)
+    return (
+        token_bucket_series(
+            label="TPS last 1m",
+            bucket_label="1s",
+            sessions=session_tuple,
+            window_end=current,
+            bucket_count=60,
+            bucket_seconds=1,
+        ),
+        token_bucket_series(
+            label="TPM last 1h",
+            bucket_label="1m",
+            sessions=session_tuple,
+            window_end=current,
+            bucket_count=60,
+            bucket_seconds=60,
+        ),
+    )
+
+
+def token_bucket_series(
+    label: str,
+    bucket_label: str,
+    sessions: Iterable[SessionUsage],
+    window_end: datetime,
+    bucket_count: int,
+    bucket_seconds: int,
+) -> StatisticLineSeries:
+    end = normalize_datetime(window_end)
+    start = end - timedelta(seconds=bucket_count * bucket_seconds)
+    values = [0.0] * bucket_count
+    for session in sessions:
+        for event in session.usage_events:
+            occurred_at = normalize_datetime(event.occurred_at)
+            if occurred_at < start or occurred_at >= end:
+                continue
+            index = int((occurred_at - start).total_seconds() // bucket_seconds)
+            if 0 <= index < bucket_count:
+                values[index] += max(0, event.tokens.total_tokens)
+    return StatisticLineSeries(
+        label=label,
+        bucket_label=bucket_label,
+        values=tuple(values),
+    )
+
+
+def statistic_usage_rate_window(
+    label: str,
+    sessions: Iterable[SessionUsage],
+    window_start: datetime,
+    window_end: datetime,
+) -> StatisticUsageRateWindow:
+    start = normalize_datetime(window_start)
+    end = normalize_datetime(window_end)
+    tokens = 0
+    requests = 0
+    for session in sessions:
+        for event in session.usage_events:
+            occurred_at = normalize_datetime(event.occurred_at)
+            if occurred_at < start or occurred_at >= end:
+                continue
+            requests += max(0, event.requests)
+            tokens += max(0, event.tokens.total_tokens)
+
+    return StatisticUsageRateWindow(
+        label=label,
+        window_start=start,
+        window_end=end,
+        tokens=tokens,
+        requests=requests,
+    )
+
+
+def rounded_hour_start(value: datetime) -> datetime:
+    return value.replace(minute=0, second=0, microsecond=0)
+
+
+def previous_month_start(month_start: datetime) -> datetime:
+    previous_day = month_start.date().replace(day=1) - timedelta(days=1)
+    return datetime.combine(
+        previous_day.replace(day=1),
+        time.min,
+        tzinfo=month_start.tzinfo,
     )
 
 

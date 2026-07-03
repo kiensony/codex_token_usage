@@ -16,8 +16,140 @@ from .forecast_display import (
 from .formatting import truncate, visible_start
 from .settings_model import prediction_algorithm_label
 from .state import TAB_VIEWS, VIEW_LABELS
-from .usage_rates import current_usage_rate_rows
+from .usage_rates import (
+    current_usage_rate_rows,
+    format_rate,
+    statistic_line_series,
+    statistic_usage_rate_windows,
+)
 from .view_overlays import ViewOverlayMixin
+
+
+def downsample_series(values: tuple[float, ...], width: int) -> tuple[float, ...]:
+    if width <= 0:
+        return ()
+    if len(values) <= width:
+        return values
+    sampled: list[float] = []
+    count = len(values)
+    for index in range(width):
+        start = (index * count) // width
+        end = max(start + 1, ((index + 1) * count) // width)
+        sampled.append(max(values[start:end]))
+    return tuple(sampled)
+
+
+BRAILLE_DOTS = (
+    (0x01, 0x02, 0x04, 0x40),
+    (0x08, 0x10, 0x20, 0x80),
+)
+
+
+def braille_dot(mask: int) -> str:
+    if mask == 0:
+        return " "
+    return chr(0x2800 + mask)
+
+
+def draw_braille_dot(canvas: list[list[int]], x: int, y: int) -> None:
+    if y < 0 or y >= len(canvas) * 4:
+        return
+    if not canvas or x < 0 or x >= len(canvas[0]) * 2:
+        return
+    cell_x = x // 2
+    cell_y = y // 4
+    canvas[cell_y][cell_x] |= BRAILLE_DOTS[x % 2][y % 4]
+
+
+def draw_braille_segment(
+    canvas: list[list[int]],
+    start_x: int,
+    start_y: int,
+    end_x: int,
+    end_y: int,
+) -> None:
+    x = start_x
+    y = start_y
+    dx = abs(end_x - start_x)
+    dy = -abs(end_y - start_y)
+    step_x = 1 if start_x < end_x else -1
+    step_y = 1 if start_y < end_y else -1
+    error = dx + dy
+    while True:
+        draw_braille_dot(canvas, x, y)
+        if x == end_x and y == end_y:
+            break
+        doubled_error = 2 * error
+        if doubled_error >= dy:
+            error += dy
+            x += step_x
+        if doubled_error <= dx:
+            error += dx
+            y += step_y
+
+
+def line_chart_rows(
+    values: tuple[float, ...],
+    width: int,
+    height: int,
+) -> list[str]:
+    if width <= 0 or height <= 0:
+        return []
+    label_width = 9
+    plot_width = width - label_width - 3
+    if plot_width <= 0:
+        return []
+    sampled = downsample_series(values, plot_width * 2)
+    if not sampled:
+        return []
+    max_value = max(sampled)
+    mid_value = max_value / 2
+    dot_width = plot_width * 2
+    dot_height = height * 4
+    points: list[tuple[int, int]] = []
+    for index, value in enumerate(sampled):
+        if len(sampled) == 1:
+            x = 0
+        else:
+            x = round(index * (dot_width - 1) / (len(sampled) - 1))
+        if max_value <= 0:
+            y = dot_height - 1
+        else:
+            ratio = min(max(value / max_value, 0.0), 1.0)
+            y = dot_height - 1 - round(ratio * (dot_height - 1))
+        points.append((x, y))
+    canvas = [[0 for _ in range(plot_width)] for _ in range(height)]
+    previous_point: tuple[int, int] | None = None
+    for point in points:
+        if previous_point is None:
+            draw_braille_dot(canvas, point[0], point[1])
+        else:
+            draw_braille_segment(
+                canvas,
+                previous_point[0],
+                previous_point[1],
+                point[0],
+                point[1],
+            )
+        previous_point = point
+    labeled_rows: list[str] = []
+    labeled_rows.append(
+        f"{format_rate(max_value):>{label_width}} ┌{'─' * plot_width}┐"
+    )
+    for row_index, row in enumerate(canvas):
+        if row_index == height // 2:
+            label = format_rate(mid_value)
+        else:
+            label = ""
+        plot = "".join(braille_dot(cell) for cell in row)
+        labeled_rows.append(f"{label:>{label_width}} │{plot}│")
+    labeled_rows.append(f"{'0':>{label_width}} └{'─' * plot_width}┘")
+    if plot_width >= 10:
+        axis_label = f"{'older':<{plot_width // 2}}{'now':>{plot_width - (plot_width // 2)}}"
+    else:
+        axis_label = "older now"[:plot_width]
+    labeled_rows.append(f"{'':>{label_width}}  {axis_label}")
+    return labeled_rows
 
 
 class ViewRendererMixin(ViewOverlayMixin):
@@ -27,6 +159,8 @@ class ViewRendererMixin(ViewOverlayMixin):
         self.render_header(width)
         if self.state.view == "overview":
             self.render_overview(height, width)
+        elif self.state.view == "statistic":
+            self.render_statistic(height, width)
         elif self.state.view == "daily":
             self.render_daily(height, width)
         elif self.state.view == "weekly":
@@ -137,6 +271,69 @@ class ViewRendererMixin(ViewOverlayMixin):
             current_usage_rate_rows(self.state.visible_sessions(), forecast.generated_at)
         )
         self.render_key_values(4, rows, width, height)
+    def render_statistic(self, height: int, width: int) -> None:
+        windows = statistic_usage_rate_windows(
+            self.state.visible_sessions(),
+            self.state.dataset.loaded_at,
+        )
+        if self.state.statistic_display_mode == "line":
+            self.render_statistic_line_chart(height, width)
+            return
+        header = (
+            f"{'window':<12} {'rps':>8} {'rpm':>8} {'rph':>8} "
+            f"{'tps':>12} {'tpm':>12} {'tph':>12} {'tpr':>12}"
+        )
+        self.render_themed_text(4, 0, header[: max(0, width - 1)], curses.A_BOLD)
+        for offset, row in enumerate(windows[: max(0, height - 7)], start=5):
+            line = (
+                f"{row.label:<12} "
+                f"{format_rate(row.rps):>8} "
+                f"{format_rate(row.rpm):>8} "
+                f"{format_rate(row.rph):>8} "
+                f"{format_rate(row.tps):>12} "
+                f"{format_rate(row.tpm):>12} "
+                f"{format_rate(row.tph):>12} "
+                f"{format_rate(row.tpr):>12}"
+            )
+            self.safe_addstr(offset, 0, line[: max(0, width - 1)])
+
+    def render_statistic_line_chart(self, height: int, width: int) -> None:
+        last_y = height - 3
+        if last_y < 4 or width <= 1:
+            return
+        series_rows = statistic_line_series(
+            self.state.visible_sessions(),
+            self.state.dataset.loaded_at,
+        )
+        y = 4
+        self.render_themed_text(
+            y,
+            0,
+            "Statistic line chart"[: max(0, width - 1)],
+            curses.A_BOLD,
+        )
+        y += 1
+        available = max(0, last_y - y + 1)
+        chart_height = max(1, min(6, (available - 9) // max(1, len(series_rows))))
+        chart_width = max(1, min(72, width - 1))
+        for index, series in enumerate(series_rows):
+            if y > last_y:
+                break
+            max_value = max(series.values, default=0.0)
+            latest = series.values[-1] if series.values else 0.0
+            title = (
+                f"{series.label}  max {format_rate(max_value)}  "
+                f"latest {format_rate(latest)}  bucket {series.bucket_label}"
+            )
+            self.render_themed_text(y, 0, title[: max(0, width - 1)], curses.A_BOLD)
+            y += 1
+            for row in line_chart_rows(series.values, chart_width, chart_height):
+                if y > last_y:
+                    break
+                self.safe_addstr(y, 0, row[: max(0, width - 1)])
+                y += 1
+            if index < len(series_rows) - 1:
+                y += 1
     def render_daily(self, height: int, width: int) -> None:
         rows = self.state.daily_rows()
         self.render_usage_rows("date", rows, height, width)

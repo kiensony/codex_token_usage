@@ -46,6 +46,13 @@ class TokenBreakdown:
 
 
 @dataclass(frozen=True)
+class UsageEvent:
+    occurred_at: datetime
+    tokens: TokenBreakdown
+    requests: int = 1
+
+
+@dataclass(frozen=True)
 class SessionMetadata:
     session_id: str
     title: str | None = None
@@ -77,6 +84,7 @@ class SessionUsage:
     metadata: SessionMetadata
     has_token_event: bool = False
     request_count: int = 0
+    usage_events: tuple[UsageEvent, ...] = ()
     corrupt_lines: int = 0
 
     @property

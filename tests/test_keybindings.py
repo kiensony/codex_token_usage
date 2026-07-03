@@ -21,6 +21,7 @@ class KeybindingTests(unittest.TestCase):
 
         self.assertEqual(config.labels("open_about"), ("a",))
         self.assertEqual(config.labels("show_all_time"), ("A",))
+        self.assertEqual(config.labels("cycle_statistic_display_mode"), ("m",))
         self.assertEqual(config.labels("quit"), ("q", "Ctrl+C"))
         all_default_labels = {
             label

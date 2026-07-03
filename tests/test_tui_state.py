@@ -14,6 +14,7 @@ from codex_token_usage.models import (
     SessionUsage,
     TokenBreakdown,
     UsageDataset,
+    UsageEvent,
 )
 from codex_token_usage.pricing import ModelPrice
 from codex_token_usage.theme import DisplayConfig, PRESET_NAMES, ThemeConfig, themed_bar_segments
@@ -58,6 +59,10 @@ from codex_token_usage.tui import (
     settings_rate_text,
     settings_snapshot,
     shutdown_seconds_label,
+    downsample_series,
+    line_chart_rows,
+    statistic_line_series,
+    statistic_usage_rate_windows,
     theme_current_preset,
     theme_current_preset_label,
     theme_preset_label,
@@ -89,11 +94,18 @@ class TuiStateTests(unittest.TestCase):
         state = TuiState(dataset=dataset(), today=date(2026, 6, 29))
 
         state = state.next_view()
-        self.assertEqual(state.view, "daily")
+        self.assertEqual(state.view, "statistic")
         state = state.previous_view()
         self.assertEqual(state.view, "overview")
 
         state = state.next_view().next_view()
+        self.assertEqual(state.view, "daily")
+        self.assertEqual(
+            [row.key for row in state.daily_rows()],
+            ["2026-06-02", "2026-06-01"],
+        )
+
+        state = state.next_view()
         self.assertEqual(state.view, "weekly")
         self.assertEqual([row.key for row in state.weekly_rows()], ["2026-W23"])
         self.assertEqual(state.weekly_rows()[0].tokens.total_tokens, 30)
@@ -289,10 +301,20 @@ class TuiStateTests(unittest.TestCase):
         reloaded = state.reload(lambda since, until: dataset(extra=True))
         self.assertEqual(reloaded.selected_session().session_id, selected_id)
 
-    def test_graph_helpers(self) -> None:
+    def test_chart_helpers(self) -> None:
         self.assertEqual(usage_bar(0, 100, 5), ".....")
         self.assertEqual(usage_bar(50, 100, 5), "##...")
         self.assertEqual(usage_bar(100, 100, 5), "#####")
+        self.assertEqual(downsample_series((1, 2, 3, 4), 2), (2, 4))
+        chart = line_chart_rows((0, 5, 10), 15, 3)
+        self.assertEqual(chart[0], "     10.0 ┌───┐")
+        self.assertEqual(chart[1], "          │ ⢀⠎│")
+        self.assertEqual(chart[2], "     5.00 │⢀⠎ │")
+        self.assertEqual(chart[3], "          │⡜  │")
+        self.assertEqual(chart[4], "        0 └───┘")
+        self.assertIn("old", chart[5])
+        self.assertNotIn("/", "".join(chart))
+        self.assertNotIn("\\", "".join(chart))
         self.assertEqual(visible_start(12, 10, 20), 3)
         self.assertEqual(truncate("abcdef", 4), "abc~")
         self.assertEqual(CursesUi.session_model_width(160), 24)
@@ -328,7 +350,7 @@ class TuiStateTests(unittest.TestCase):
         )
 
         ui.handle_key(ord("n"))
-        self.assertEqual(ui.state.view, "daily")
+        self.assertEqual(ui.state.view, "statistic")
 
     def test_help_overlay_closes_from_multiple_keys_and_ignores_navigation(self) -> None:
         for close_key in (ord("?"), ord("q"), 27):
@@ -686,9 +708,37 @@ class TuiStateTests(unittest.TestCase):
 
         self.assertEqual(ui.state.status, "settings canceled")
 
+    def test_m_key_toggles_statistic_display_mode_only_on_statistic(self) -> None:
+        ui = CursesUi(
+            None,
+            TuiState(dataset=dataset()),
+            TuiOptions(codex_home=Path("/tmp")),
+        )
+
+        ui.handle_key(ord("m"))
+
+        self.assertEqual(ui.state.statistic_display_mode, "table")
+        self.assertEqual(
+            ui.state.status,
+            "Statistic display mode is available on Statistic",
+        )
+
+        ui.state = ui.state.next_view()
+        self.assertEqual(ui.state.view, "statistic")
+
+        ui.handle_key(ord("m"))
+
+        self.assertEqual(ui.state.statistic_display_mode, "line")
+        self.assertEqual(ui.state.status, "Statistic display: line")
+
+        ui.handle_key(ord("m"))
+
+        self.assertEqual(ui.state.statistic_display_mode, "table")
+        self.assertEqual(ui.state.status, "Statistic display: table")
+
     def test_curses_ui_captures_keybindings(self) -> None:
         ui = CursesUi(
-            FakeStdScr([ord("n"), ord("m")]),
+            FakeStdScr([ord("n"), ord("x")]),
             TuiState(dataset=dataset()),
             TuiOptions(codex_home=Path("/tmp")),
         )
@@ -705,8 +755,8 @@ class TuiStateTests(unittest.TestCase):
             "next_view",
             append=True,
         )
-        self.assertEqual(keybindings.labels("next_view"), ("n", "m"))
-        self.assertEqual(status, "Next view: n, m")
+        self.assertEqual(keybindings.labels("next_view"), ("n", "x"))
+        self.assertEqual(status, "Next view: n, x")
 
         ui = CursesUi(
             FakeStdScr([SECRET_CODE_KEY]),
@@ -896,7 +946,7 @@ class TuiStateTests(unittest.TestCase):
                 loaded_at=datetime.fromisoformat("2026-06-02T01:00:00+00:00")
             ),
         )
-        stdscr = FakeStdScr([], size=(40, 160))
+        stdscr = FakeStdScr([], size=(60, 160))
         ui = CursesUi(stdscr, state, TuiOptions(codex_home=Path("/tmp")))
 
         ui.render_overview(40, 160)
@@ -908,6 +958,211 @@ class TuiStateTests(unittest.TestCase):
         self.assertIn("Current week TPS/RPS", labels)
         self.assertIn("Current month TPS/RPS", labels)
         self.assertTrue(any("tok/s" in text and "req/s" in text for text in rendered))
+
+    def test_statistic_usage_rate_windows_use_rounded_complete_periods(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sessions = (
+                session(
+                    "stats",
+                    0,
+                    0,
+                    "/repo",
+                    "2026-06-18T12:34:00+00:00",
+                    root,
+                    usage_events=[
+                        usage_event("2026-06-18T11:15:00+00:00", 3600),
+                        usage_event("2026-06-18T11:45:00+00:00", 3600),
+                        usage_event("2026-06-18T12:00:00+00:00", 9999),
+                        usage_event("2026-06-18T08:00:00+00:00", 36000, requests=10),
+                        usage_event("2026-06-17T06:00:00+00:00", 24000, requests=24),
+                        usage_event("2026-06-10T12:00:00+00:00", 168000, requests=168),
+                        usage_event("2026-05-20T12:00:00+00:00", 720000, requests=720),
+                    ],
+                ),
+            )
+
+        windows = statistic_usage_rate_windows(
+            sessions,
+            datetime.fromisoformat("2026-06-18T12:34:00+00:00"),
+        )
+
+        by_label = {window.label: window for window in windows}
+        self.assertEqual(
+            by_label["Last hour"].window_start.isoformat(),
+            "2026-06-18T11:00:00+00:00",
+        )
+        self.assertEqual(
+            by_label["Last hour"].window_end.isoformat(),
+            "2026-06-18T12:00:00+00:00",
+        )
+        self.assertEqual(by_label["Last hour"].tokens, 7200)
+        self.assertEqual(by_label["Last hour"].requests, 2)
+        self.assertAlmostEqual(by_label["Last hour"].tps, 2.0)
+        self.assertAlmostEqual(by_label["Last hour"].tpm, 120.0)
+        self.assertAlmostEqual(by_label["Last hour"].tph, 7200.0)
+        self.assertAlmostEqual(by_label["Last hour"].tpr, 3600.0)
+        self.assertAlmostEqual(by_label["Last hour"].rph, 2.0)
+        self.assertEqual(
+            by_label["Last 5h"].window_start.isoformat(),
+            "2026-06-18T07:00:00+00:00",
+        )
+        self.assertEqual(by_label["Last 5h"].tokens, 43200)
+        self.assertAlmostEqual(by_label["Last 5h"].tph, 8640.0)
+        self.assertAlmostEqual(by_label["Last 5h"].tpr, 3600.0)
+        self.assertEqual(
+            by_label["Last day"].window_start.isoformat(),
+            "2026-06-17T00:00:00+00:00",
+        )
+        self.assertEqual(by_label["Last day"].tokens, 24000)
+        self.assertAlmostEqual(by_label["Last day"].tph, 1000.0)
+        self.assertEqual(
+            by_label["Last week"].window_start.isoformat(),
+            "2026-06-08T00:00:00+00:00",
+        )
+        self.assertEqual(by_label["Last week"].tokens, 168000)
+        self.assertAlmostEqual(by_label["Last week"].tph, 1000.0)
+        self.assertEqual(
+            by_label["Last month"].window_start.isoformat(),
+            "2026-05-01T00:00:00+00:00",
+        )
+        self.assertEqual(by_label["Last month"].tokens, 720000)
+        self.assertAlmostEqual(by_label["Last month"].tph, 967.741935, places=6)
+
+    def test_statistic_line_series_uses_ordered_tps_and_tpm_buckets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sessions = (
+                session(
+                    "series",
+                    0,
+                    0,
+                    "/repo",
+                    "2026-06-18T12:00:00+00:00",
+                    root,
+                    usage_events=[
+                        usage_event("2026-06-18T11:00:00+00:00", 100),
+                        usage_event("2026-06-18T11:59:00+00:00", 60),
+                        usage_event("2026-06-18T11:59:30+00:00", 30),
+                        usage_event("2026-06-18T11:59:58+00:00", 10),
+                        usage_event("2026-06-18T11:59:58+00:00", 5),
+                        usage_event("2026-06-18T11:59:59+00:00", 20),
+                        usage_event("2026-06-18T12:00:00+00:00", 999),
+                    ],
+                ),
+            )
+
+        tps, tpm = statistic_line_series(
+            sessions,
+            datetime.fromisoformat("2026-06-18T12:00:00+00:00"),
+        )
+
+        self.assertEqual(tps.label, "TPS last 1m")
+        self.assertEqual(tps.bucket_label, "1s")
+        self.assertEqual(len(tps.values), 60)
+        self.assertEqual(tps.values[-2:], (15.0, 20.0))
+        self.assertEqual(tpm.label, "TPM last 1h")
+        self.assertEqual(tpm.bucket_label, "1m")
+        self.assertEqual(len(tpm.values), 60)
+        self.assertEqual(tpm.values[0], 100.0)
+        self.assertEqual(tpm.values[-1], 125.0)
+
+    def test_statistic_tab_renders_rounded_rate_table(self) -> None:
+        state = TuiState(
+            dataset=dataset(
+                loaded_at=datetime.fromisoformat("2026-06-18T12:00:00+00:00")
+            )
+        ).next_view()
+        stdscr = FakeStdScr([], size=(60, 160))
+        ui = CursesUi(stdscr, state, TuiOptions(codex_home=Path("/tmp")))
+
+        ui.render()
+
+        rendered = [text for _y, _x, text, _attr in stdscr.writes]
+        self.assertIn(" Statistic ", rendered)
+        self.assertTrue(any("rps" in text and "tpr" in text for text in rendered))
+        self.assertTrue(any("Last hour" in text for text in rendered))
+
+    def test_statistic_tab_renders_line_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            usage_dataset = UsageDataset(
+                sessions=(
+                    session(
+                        "stats",
+                        0,
+                        0,
+                        "/repo",
+                        "2026-06-18T12:00:00+00:00",
+                        root,
+                        usage_events=[
+                            usage_event("2026-06-18T11:15:00+00:00", 3600),
+                            usage_event("2026-06-18T11:45:00+00:00", 3600),
+                        ],
+                    ),
+                ),
+                codex_home=root,
+                loaded_at=datetime.fromisoformat("2026-06-18T12:00:00+00:00"),
+                sqlite_available=False,
+            )
+        state = TuiState(
+            dataset=usage_dataset,
+            statistic_display_mode="line",
+        ).next_view()
+        stdscr = FakeStdScr([], size=(60, 160))
+        ui = CursesUi(stdscr, state, TuiOptions(codex_home=Path("/tmp")))
+
+        ui.render()
+
+        rendered = [text for _y, _x, text, _attr in stdscr.writes]
+        chart_rows = [
+            text
+            for text in rendered
+            if "│" in text or "┌" in text or "└" in text
+        ]
+        self.assertIn("Statistic line chart", rendered)
+        self.assertTrue(any("TPS last 1m" in text for text in rendered))
+        self.assertTrue(any("TPM last 1h" in text for text in rendered))
+        self.assertTrue(any("│" in text for text in chart_rows))
+        self.assertTrue(any("┌" in text and "─" in text for text in chart_rows))
+        self.assertTrue(any("older" in text and "now" in text for text in rendered))
+        self.assertTrue(
+            any(
+                any("\u2801" <= char <= "\u28ff" for char in text)
+                for text in chart_rows
+            )
+        )
+        self.assertFalse(any("/" in text or "\\" in text for text in chart_rows))
+
+    def test_statistic_line_mode_handles_zero_data(self) -> None:
+        state = TuiState(
+            dataset=dataset(
+                loaded_at=datetime.fromisoformat("2026-06-18T12:00:00+00:00")
+            ),
+            statistic_display_mode="line",
+        ).next_view()
+        stdscr = FakeStdScr([], size=(40, 160))
+        ui = CursesUi(stdscr, state, TuiOptions(codex_home=Path("/tmp")))
+
+        ui.render()
+
+        rendered = [text for _y, _x, text, _attr in stdscr.writes]
+        chart_rows = [
+            text
+            for text in rendered
+            if "│" in text or "┌" in text or "└" in text
+        ]
+        self.assertIn("Statistic line chart", rendered)
+        self.assertTrue(any("TPS last 1m" in text for text in rendered))
+        self.assertTrue(any("│" in text for text in chart_rows))
+        self.assertTrue(any("┌" in text and "─" in text for text in chart_rows))
+        self.assertTrue(any("older" in text and "now" in text for text in rendered))
+        self.assertTrue(
+            any(
+                any("\u2801" <= char <= "\u28ff" for char in text)
+                for text in chart_rows
+            )
+        )
 
     def test_prediction_algorithm_cycles_from_misc_setting(self) -> None:
         prediction = cycle_prediction_algorithm(PredictionConfig())
@@ -1077,6 +1332,7 @@ def session(
     updated_at: str,
     root: Path,
     request_count: int = 0,
+    usage_events: list[UsageEvent] | None = None,
 ) -> SessionUsage:
     updated = datetime.fromisoformat(updated_at)
     return SessionUsage(
@@ -1096,6 +1352,19 @@ def session(
         ),
         has_token_event=True,
         request_count=request_count,
+        usage_events=tuple(usage_events or ()),
+    )
+
+
+def usage_event(
+    occurred_at: str,
+    total_tokens: int,
+    requests: int = 1,
+) -> UsageEvent:
+    return UsageEvent(
+        occurred_at=datetime.fromisoformat(occurred_at),
+        tokens=TokenBreakdown(total_tokens=total_tokens),
+        requests=requests,
     )
 
 

@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from codex_token_usage.loader import load_usage, parse_session_jsonl
+from codex_token_usage.models import TokenBreakdown
 
 
 class LoaderTests(unittest.TestCase):
@@ -39,6 +40,32 @@ class LoaderTests(unittest.TestCase):
             self.assertEqual(session.tokens.cached_input_tokens, 5)
             self.assertEqual(session.tokens.reasoning_output_tokens, 3)
             self.assertEqual(session.request_count, 2)
+            self.assertEqual(
+                [event.tokens for event in session.usage_events],
+                [
+                    TokenBreakdown(
+                        input_tokens=10,
+                        output_tokens=4,
+                        cached_input_tokens=2,
+                        reasoning_output_tokens=1,
+                        total_tokens=14,
+                    ),
+                    TokenBreakdown(
+                        input_tokens=10,
+                        output_tokens=4,
+                        cached_input_tokens=3,
+                        reasoning_output_tokens=2,
+                        total_tokens=14,
+                    ),
+                ],
+            )
+            self.assertEqual(
+                [event.occurred_at.isoformat() for event in session.usage_events],
+                [
+                    "2026-06-01T10:01:00+00:00",
+                    "2026-06-01T10:01:00+00:00",
+                ],
+            )
             self.assertEqual(session.reasoning_level, "medium")
 
     def test_corrupt_jsonl_lines_are_skipped(self) -> None:

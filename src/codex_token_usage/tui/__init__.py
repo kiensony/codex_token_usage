@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .app import CursesUi, run_tui
+from .views import downsample_series, line_chart_rows
 from .forecast_display import (
     forecast_key_values,
     forecast_label,
@@ -76,6 +77,7 @@ from .state import (
     DEFAULT_PAGE_SIZE,
     REASONING_LEVEL_RANK,
     SORT_FIELDS,
+    STATISTIC_DISPLAY_MODES,
     TAB_VIEWS,
     VIEWS,
     VIEW_LABELS,
@@ -87,10 +89,15 @@ from .state import (
     session_sort_key,
 )
 from .usage_rates import (
+    StatisticLineSeries,
+    StatisticUsageRateWindow,
     UsageRateWindow,
     current_usage_rate_rows,
     current_usage_rate_windows,
     format_rate,
     format_usage_rate_indicator,
     session_request_count,
+    statistic_line_series,
+    statistic_usage_rate_window,
+    statistic_usage_rate_windows,
 )
