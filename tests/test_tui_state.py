@@ -21,6 +21,7 @@ from codex_token_usage.theme import (
     DisplayConfig,
     PRESET_NAMES,
     ThemeConfig,
+    theme_palette,
     themed_bar_segments,
 )
 from codex_token_usage.tui import (
@@ -77,6 +78,7 @@ from codex_token_usage.tui import (
 )
 from codex_token_usage.tui.secret_codes import (
     EFFECT_BIRTHDAY,
+    EFFECT_CLAUDE,
     EFFECT_EMERGENCY,
     EFFECT_HEART,
     EFFECT_NYAN,
@@ -533,6 +535,8 @@ class TuiStateTests(unittest.TestCase):
             "1976": EFFECT_HEART,
             "2011": EFFECT_NYAN,
             "iamdeveloper": EFFECT_TRANS_FLAG,
+            "claude": EFFECT_CLAUDE,
+            "ClaUdE": EFFECT_CLAUDE,
             "pwned": EFFECT_PWNED,
         }
         for code, expected in expected_effects.items():
@@ -686,6 +690,47 @@ class TuiStateTests(unittest.TestCase):
             ui.handle_key(SECRET_CODE_KEY)
 
         self.assertIn("root@hacker:~# ", [write[2] for write in stdscr.writes])
+        self.assertEqual(ui.state.status, "keep")
+
+    def test_clawd_secret_code_renders_selected_flag_lobster_dance(self) -> None:
+        keys = [ord(char) for char in "claude"] + [10, ord("q")]
+        stdscr = FakeStdScr(keys, size=(28, 120))
+        selected_theme = ThemeConfig(enabled=False, preset="rainbow")
+        active_palette = theme_palette(ThemeConfig(enabled=True, preset="rainbow"))
+        ui = CursesUi(
+            stdscr,
+            TuiState(dataset=dataset(), status="keep"),
+            TuiOptions(codex_home=Path("/tmp"), theme=selected_theme),
+        )
+        if not active_palette:
+            self.fail("rainbow palette missing from test fixture")
+
+        def preview_attr(rgb: tuple[int, int, int], base_attr: int = 0) -> int:
+            if rgb in active_palette:
+                return base_attr + (active_palette.index(rgb) + 1) * 1000
+            return base_attr
+
+        ui.preview_attr = preview_attr
+
+        ui.handle_key(SECRET_CODE_KEY)
+
+        rendered = [text for _y, _x, text, _attr in stdscr.writes]
+        self.assertTrue(any("(o o)" in text for text in rendered))
+        self.assertTrue(any("CLAWD" in text for text in rendered))
+        self.assertTrue(any("___" in text for text in rendered))
+        self.assertIn(140, stdscr.timeouts)
+
+        mascot_attrs = {
+            attr
+            for _y, _x, text, attr in stdscr.writes
+            if text.strip()
+        }
+        expected_attrs = {
+            curses.A_BOLD + (index + 1) * 1000
+            for index, _rgb in enumerate(active_palette)
+        }
+        self.assertTrue(mascot_attrs)
+        self.assertTrue(mascot_attrs.issubset(expected_attrs))
         self.assertEqual(ui.state.status, "keep")
 
     def test_trans_flag_waves_vertically_until_dismissal(self) -> None:

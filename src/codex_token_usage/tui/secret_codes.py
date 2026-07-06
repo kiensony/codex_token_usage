@@ -18,6 +18,7 @@ EFFECT_BIRTHDAY = "birthday_cake"
 EFFECT_HEART = "heart"
 EFFECT_NYAN = "nyan"
 EFFECT_TRANS_FLAG = "trans_flag"
+EFFECT_CLAUDE = "clawd"
 EFFECT_EMERGENCY = "emergency"
 EFFECT_PWNED = "pwned"
 
@@ -36,9 +37,54 @@ SECRET_CODE_EFFECTS = {
     "1976": EFFECT_HEART,
     "2011": EFFECT_NYAN,
     "iamdeveloper": EFFECT_TRANS_FLAG,
+    "claude": EFFECT_CLAUDE,
     "pwned": EFFECT_PWNED,
     **{code: EFFECT_EMERGENCY for code in EMERGENCY_CODES},
 }
+CLAWD_DANCE_FRAMES = (
+    (
+        "      \\     /      ",
+        "   __  \\   /  __   ",
+        "  (  \\__\\ /__/  )  ",
+        "   \\___(o o)___/   ",
+        "       \\ v /       ",
+        "      /|CLAWD|\\    ",
+        "     /_|_____|_\\   ",
+        "       /_/ \\_\\     ",
+    ),
+    (
+        "   \\           /   ",
+        "    \\__     __/    ",
+        "  (___ \\   / ___)  ",
+        "      \\(o o)/      ",
+        "       \\ ^ /       ",
+        "     _/|CLAWD|\\_   ",
+        "    /__|_____|__\\  ",
+        "      _/     \\_    ",
+    ),
+    (
+        "      \\     /      ",
+        "  __   \\   /   __  ",
+        " (  \\___\\ /___/  ) ",
+        "   \\___(o o)___/   ",
+        "       \\ - /       ",
+        "     _/|CLAWD|\\_   ",
+        "    /__|_____|__\\  ",
+        "       /_/ \\_\\     ",
+    ),
+    (
+        "   \\           /   ",
+        "  __\\_       _/__  ",
+        " (____\\     /____) ",
+        "      (o o)        ",
+        "     /\\ v /\\       ",
+        "    /_|CLAWD|_\\    ",
+        "      |_____|      ",
+        "     _/     \\_     ",
+    ),
+)
+CLAWD_DANCE_X = (0, 2, 0, -2)
+CLAWD_DANCE_Y = (0, -1, 0, 1)
 NYAN_FRAME_PAYLOAD = """
 c-rlq%aW|B5{Bm$=OLIeAqdCt2o<Lt?wZ34BAD{{J2OEAwW_c#x^^$=wQNhP{pBLcXJ#Vht10x(8RMM
 uul)5zzLjo2um0tm!rmVw{Cc|ZqlD!td<t*A!lF2)RdeyjU&owtQ6-K^(vEuHv{6n4#c`EBZYsQsh6C
@@ -168,6 +214,8 @@ def render_secret_effect(ui: SecretCodeRenderer, effect: str) -> None:
         render_nyan(ui)
     elif effect == EFFECT_TRANS_FLAG:
         render_trans_flag(ui)
+    elif effect == EFFECT_CLAUDE:
+        render_clawd(ui)
     elif effect == EFFECT_EMERGENCY:
         render_emergency(ui)
     elif effect == EFFECT_PWNED:
@@ -384,6 +432,86 @@ def render_trans_flag(ui: SecretCodeRenderer) -> None:
                             " " * segment_width,
                             attr,
                         )
+            stdscr.refresh()
+            key = stdscr.getch()
+            if key in SECRET_DISMISS_KEYS:
+                return
+            frame += 1
+    finally:
+        if hasattr(stdscr, "timeout"):
+            stdscr.timeout(-1)
+
+
+def render_clawd(ui: SecretCodeRenderer) -> None:
+    stdscr = getattr(ui, "stdscr", None)
+    if stdscr is None:
+        return
+    palette = _selected_flag_palette(ui)
+    if not palette:
+        return
+
+    mascot_attrs = tuple(
+        _preview_or_base_attr(ui, rgb, curses.A_BOLD) for rgb in palette
+    )
+    wave_offsets = (0, 1)
+    frame_ms = 140
+    if hasattr(stdscr, "timeout"):
+        stdscr.timeout(frame_ms)
+    try:
+        frame = 0
+        while True:
+            stdscr.erase()
+            height, width = stdscr.getmaxyx()
+            available_width = max(1, width - 8)
+            segment_width = max(1, available_width // 12)
+            cycle_width = segment_width * len(wave_offsets)
+            if available_width >= cycle_width:
+                flag_width = available_width - (available_width % cycle_width)
+            else:
+                flag_width = available_width
+            stripe_height = max(
+                1,
+                min(
+                    max(1, flag_width // 36),
+                    max(1, (height - 4) // (len(palette) + 2)),
+                ),
+            )
+            wave_height = (
+                len(palette) * stripe_height
+                + max(wave_offsets)
+                - min(wave_offsets)
+            )
+            top = max(0, (height - wave_height) // 2 - min(wave_offsets))
+            left = max(0, (width - flag_width) // 2)
+
+            for column in range(0, flag_width, segment_width):
+                offset = wave_offsets[
+                    (frame + column // segment_width) % len(wave_offsets)
+                ]
+                for row, rgb in enumerate(palette):
+                    attr = _preview_or_base_attr(ui, rgb, curses.A_REVERSE)
+                    for stripe_row in range(stripe_height):
+                        ui.safe_addstr(
+                            top + row * stripe_height + stripe_row + offset,
+                            left + column,
+                            " " * segment_width,
+                            attr,
+                        )
+
+            clawd_frame = CLAWD_DANCE_FRAMES[frame % len(CLAWD_DANCE_FRAMES)]
+            clawd_width = max((len(line) for line in clawd_frame), default=0)
+            _draw_clawd(
+                ui=ui,
+                clawd_frame=clawd_frame,
+                y=top
+                + max(0, (wave_height - len(clawd_frame)) // 2)
+                + CLAWD_DANCE_Y[frame % len(CLAWD_DANCE_Y)],
+                x=left
+                + max(0, (flag_width - clawd_width) // 2)
+                + CLAWD_DANCE_X[frame % len(CLAWD_DANCE_X)],
+                attrs=mascot_attrs,
+                start_index=frame,
+            )
             stdscr.refresh()
             key = stdscr.getch()
             if key in SECRET_DISMISS_KEYS:
@@ -630,3 +758,40 @@ def _wait_for_secret_dismissal(ui: SecretCodeRenderer) -> None:
         if hasattr(stdscr, "timeout"):
             stdscr.timeout(-1)
 
+
+def _selected_flag_palette(ui: SecretCodeRenderer) -> tuple[tuple[int, int, int], ...]:
+    options_theme = getattr(getattr(ui, "options", None), "theme", None)
+    if options_theme is not None:
+        palette = theme_palette(
+            ThemeConfig(
+                enabled=True,
+                preset=options_theme.preset,
+                color_mode=options_theme.color_mode,
+                lightness=options_theme.lightness,
+                show_accent_line=options_theme.show_accent_line,
+                themed_bars=options_theme.themed_bars,
+            )
+        )
+        if palette:
+            return palette
+    return theme_palette(ThemeConfig(enabled=True, preset="trans"))
+
+
+def _draw_clawd(
+    ui: SecretCodeRenderer,
+    clawd_frame: tuple[str, ...],
+    y: int,
+    x: int,
+    attrs: tuple[int, ...],
+    start_index: int = 0,
+) -> None:
+    if not attrs:
+        attrs = (0,)
+    for row, raw_line in enumerate(clawd_frame):
+        line = raw_line.rstrip()
+        if not line.strip():
+            continue
+        left_padding = len(line) - len(line.lstrip())
+        text = line[left_padding:]
+        attr = attrs[(start_index + row) % len(attrs)]
+        ui.safe_addstr(y + row, x + left_padding, text, attr)
