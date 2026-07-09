@@ -75,6 +75,7 @@ from codex_token_usage.tui import (
     truncate,
     usage_bar,
     visible_start,
+    format_token_count,
 )
 from codex_token_usage.tui.secret_codes import (
     EFFECT_BIRTHDAY,
@@ -128,6 +129,11 @@ class TuiStateTests(unittest.TestCase):
             [row.key for row in state.hourly_rows()],
             ["2026-06-02 00:00", "2026-06-01 00:00"],
         )
+
+        state = state.next_view()
+        self.assertEqual(state.view, "models")
+        self.assertEqual([row.key for row in state.model_rows()], ["gpt-5"])
+        self.assertEqual(state.model_rows()[0].tokens.total_tokens, 30)
 
         state = state.next_view()
         self.assertEqual(state.view, "projects")
@@ -919,6 +925,7 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(settings_price_source("unknown-model", custom), "unpriced")
         self.assertEqual(settings_rate_text(custom["custom-model"], "cached"), "0.1")
         self.assertEqual(display_setting_label("estimated_cost"), "estimated cost")
+        self.assertEqual(display_setting_label("compact_token_counts"), "compact token columns")
         self.assertEqual(appearance_setting_label("themed_bars"), "themed usage bars")
         self.assertEqual(misc_setting_label("about"), "about")
         self.assertEqual(misc_setting_label("reset_setup"), "reset all setup")
@@ -1221,6 +1228,135 @@ class TuiStateTests(unittest.TestCase):
         self.assertTrue(any("rps" in text and "tpr" in text for text in rendered))
         self.assertTrue(any("Last hour" in text for text in rendered))
 
+    def test_format_token_count_compacts_billion_and_trillion_values(self) -> None:
+        self.assertEqual(format_token_count(1_000_000_000, 10), "1B")
+        self.assertEqual(format_token_count(1_000_000_000_000, 10), "1T")
+        self.assertEqual(format_token_count(10_500_000_000, 10), "10.5B")
+
+    def test_sessions_view_uses_full_token_display_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            usage_dataset = UsageDataset(
+                sessions=(
+                    session(
+                        "trillion",
+                        1_000_000_000_000,
+                        500_000_000_000,
+                        "/repo",
+                        "2026-06-01T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                    session(
+                        "billion",
+                        1_000_000_000,
+                        500_000_000,
+                        "/repo",
+                        "2026-06-02T00:00:00+00:00",
+                        root,
+                        model="gpt-4",
+                    ),
+                ),
+                codex_home=root,
+                loaded_at=datetime.now(timezone.utc),
+                sqlite_available=False,
+            )
+        state = TuiState(dataset=usage_dataset)
+        while state.view != "sessions":
+            state = state.next_view()
+        stdscr = FakeStdScr([], size=(24, 160))
+        ui = CursesUi(
+            stdscr,
+            state,
+            TuiOptions(
+                codex_home=Path("/tmp"),
+                display=DisplayConfig(show_context=False, show_model=False),
+            ),
+        )
+
+        ui.render()
+
+        row_parts: dict[int, list[tuple[int, str]]] = {}
+        for y, x, text, _attr in stdscr.writes:
+            if y < 5:
+                continue
+            row_parts.setdefault(y, []).append((x, text))
+
+        session_lines = [
+            "".join(chunk for _, chunk in sorted(chunks))
+            for y, chunks in sorted(row_parts.items())
+            if y >= 5
+        ][:2]
+        rendered_lines = " ".join(session_lines)
+        self.assertIn("1,000,000,000,000", rendered_lines)
+        self.assertIn("1,000,000,000", rendered_lines)
+        self.assertNotIn(" 1T ", rendered_lines)
+        self.assertNotIn(" 1B ", rendered_lines)
+
+    def test_sessions_view_can_toggle_compact_token_display(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            usage_dataset = UsageDataset(
+                sessions=(
+                    session(
+                        "trillion",
+                        1_000_000_000_000,
+                        500_000_000_000,
+                        "/repo",
+                        "2026-06-01T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                    session(
+                        "billion",
+                        1_000_000_000,
+                        500_000_000,
+                        "/repo",
+                        "2026-06-02T00:00:00+00:00",
+                        root,
+                        model="gpt-4",
+                    ),
+                ),
+                codex_home=root,
+                loaded_at=datetime.now(timezone.utc),
+                sqlite_available=False,
+            )
+        state = TuiState(dataset=usage_dataset)
+        while state.view != "sessions":
+            state = state.next_view()
+        stdscr = FakeStdScr([], size=(24, 160))
+        ui = CursesUi(
+            stdscr,
+            state,
+            TuiOptions(
+                codex_home=Path("/tmp"),
+                display=DisplayConfig(
+                    show_context=False,
+                    show_model=False,
+                    compact_token_counts=True,
+                ),
+            ),
+        )
+
+        ui.render()
+
+        row_parts: dict[int, list[tuple[int, str]]] = {}
+        for y, x, text, _attr in stdscr.writes:
+            if y < 5:
+                continue
+            row_parts.setdefault(y, []).append((x, text))
+
+        session_lines = [
+            "".join(chunk for _, chunk in sorted(chunks))
+            for y, chunks in sorted(row_parts.items())
+            if y >= 5
+        ][:2]
+        rendered_lines = " ".join(session_lines)
+        self.assertIn("1T", rendered_lines)
+        self.assertIn("1B", rendered_lines)
+        self.assertNotIn("1,000,000,000,000", rendered_lines)
+        self.assertNotIn("1,000,000,000", rendered_lines)
+
     def test_project_view_defaults_to_project_only_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1281,6 +1417,64 @@ class TuiStateTests(unittest.TestCase):
         self.assertFalse(any("gpt-5" in text for text in labels_by_y.values()))
         self.assertFalse(any("o4-mini" in text for text in labels_by_y.values()))
         self.assertTrue(any("mode=projects" in text for text in rendered))
+
+    def test_model_view_renders_grouped_model_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            usage_dataset = UsageDataset(
+                sessions=(
+                    session(
+                        "repo-gpt",
+                        100,
+                        80,
+                        "/repo",
+                        "2026-06-01T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                    session(
+                        "repo-o4",
+                        40,
+                        30,
+                        "/repo",
+                        "2026-06-02T00:00:00+00:00",
+                        root,
+                        model="o4-mini",
+                    ),
+                    session(
+                        "other",
+                        200,
+                        100,
+                        "/other",
+                        "2026-06-03T00:00:00+00:00",
+                        root,
+                        model="gpt-5",
+                    ),
+                ),
+                codex_home=root,
+                loaded_at=datetime.now(timezone.utc),
+                sqlite_available=False,
+            )
+        state = TuiState(dataset=usage_dataset)
+        while state.view != "models":
+            state = state.next_view()
+        stdscr = FakeStdScr([], size=(60, 160))
+        ui = CursesUi(stdscr, state, TuiOptions(codex_home=Path("/tmp")))
+
+        ui.render()
+
+        rendered = [text for _y, _x, text, _attr in stdscr.writes]
+        labels_by_y = {
+            y: text
+            for y, x, text, _attr in stdscr.writes
+            if x == 0 and y >= 5
+        }
+        self.assertIn(" By Model ", rendered)
+        self.assertTrue(any(text.startswith("gpt-5") for text in labels_by_y.values()))
+        self.assertTrue(
+            any(text.startswith("o4-mini") for text in labels_by_y.values())
+        )
+        self.assertTrue(any("model" in text and "usage" in text for text in rendered))
 
     def test_project_view_can_render_indented_model_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -34,6 +34,7 @@ class DisplayConfig:
     show_reasoning_level: bool = True
     show_cache_miss: bool = True
     show_reasoning_tokens: bool = True
+    compact_token_counts: bool = False
     show_model: bool = True
     show_context: bool = True
     model_column_width: int | None = None

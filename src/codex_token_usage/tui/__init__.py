@@ -13,6 +13,7 @@ from .forecast_display import (
 )
 from .formatting import (
     FORCE_SHUTDOWN_KEYS,
+    format_token_count,
     on_off,
     settings_columns,
     truncate,

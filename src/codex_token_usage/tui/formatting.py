@@ -6,6 +6,36 @@ FLAG_PICKER_PREVIEW_HEIGHT = 5
 APPEARANCE_PREVIEW_BLOCK_HEIGHT = 5
 FORCE_SHUTDOWN_KEYS = (27, ord("q"), ord("Q"))
 
+
+def format_token_count(value: int, width: int) -> str:
+    if width <= 0:
+        return ""
+
+    formatted = f"{value:,}"
+    if len(formatted) <= width:
+        return formatted
+
+    sign = "" if value >= 0 else "-"
+    abs_value = abs(value)
+    if abs_value == 0:
+        return "0".rjust(width)
+
+    units = ("", "K", "M", "B", "T", "P", "E")
+    unit_index = 0
+    while abs_value >= 1000 and unit_index < len(units) - 1:
+        abs_value = abs_value / 1000
+        unit_index += 1
+    unit = units[unit_index]
+
+    for decimals in (3, 2, 1, 0):
+        candidate = f"{abs_value:.{decimals}f}".rstrip("0").rstrip(".")
+        candidate = f"{sign}{candidate}{unit}"
+        if len(candidate) <= width:
+            return candidate
+
+    return sign + ("?" * max(0, width - len(sign)))
+
+
 def usage_bar(value: int, max_value: int, width: int) -> str:
     if width <= 0:
         return ""

@@ -125,6 +125,7 @@ class SettingsRenderingMixin:
             ("reasoning_level", "Reasoning level column", on_off(display.show_reasoning_level)),
             ("cache_miss", "Cache miss column", on_off(display.show_cache_miss)),
             ("reasoning_tokens", "Reasoning tokens column", on_off(display.show_reasoning_tokens)),
+            ("compact_token_counts", "Compact token columns", on_off(display.compact_token_counts)),
             ("model", "Model column", on_off(display.show_model)),
             ("context", "CWD/title column", on_off(display.show_context)),
             (

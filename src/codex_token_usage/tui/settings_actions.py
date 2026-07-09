@@ -73,6 +73,15 @@ class SettingsActionsMixin:
                 show_reasoning_tokens=not display.show_reasoning_tokens,
             )
             return next_display, f"reasoning tokens column: {on_off(next_display.show_reasoning_tokens)}"
+        if field == "compact_token_counts":
+            next_display = replace(
+                display,
+                compact_token_counts=not display.compact_token_counts,
+            )
+            return (
+                next_display,
+                f"compact token columns: {on_off(next_display.compact_token_counts)}",
+            )
         if field == "model":
             next_display = replace(
                 display,

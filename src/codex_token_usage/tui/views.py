@@ -14,6 +14,7 @@ from .forecast_display import (
     usage_row_forecast_status,
 )
 from .formatting import truncate, visible_start
+from .formatting import format_token_count
 from .settings_model import prediction_algorithm_label
 from .state import TAB_VIEWS, VIEW_LABELS
 from .usage_rates import (
@@ -169,6 +170,8 @@ class ViewRendererMixin(ViewOverlayMixin):
             self.render_monthly(height, width)
         elif self.state.view == "hourly":
             self.render_hourly(height, width)
+        elif self.state.view == "models":
+            self.render_models(height, width)
         elif self.state.view == "projects":
             self.render_projects(height, width)
         elif self.state.view == "sessions":
@@ -353,8 +356,18 @@ class ViewRendererMixin(ViewOverlayMixin):
     def render_hourly(self, height: int, width: int) -> None:
         rows = self.state.hourly_rows()
         self.render_usage_rows("hour", rows, height, width)
+    def render_models(self, height: int, width: int) -> None:
+        rows = self.state.model_rows()
+        max_label = max((len(row.key) for row in rows), default=len("model"))
+        label_width = min(max(16, max_label), max(16, width // 3))
+        self.render_usage_rows("model", rows, height, width, label_width=label_width)
     def render_projects(self, height: int, width: int) -> None:
         rows = self.state.project_model_rows()
+        token_rows: list = []
+        for row in rows:
+            token_rows.append(row.project)
+            token_rows.extend(row.models)
+        token_widths = self._aggregate_token_widths(token_rows)
         max_label = max(
             (len(row.project.key) for row in rows),
             default=len("project"),
@@ -367,7 +380,7 @@ class ViewRendererMixin(ViewOverlayMixin):
         selected_index = min(self.state.selected_project_index, len(rows) - 1)
         header = (
             f" {'project':<{label_width}} {'usage':<14} "
-            f"{self.aggregate_header_fields()}"
+            f"{self.aggregate_header_fields(token_widths)}"
         )
         self.render_themed_text(4, 0, header[: max(0, width - 1)], curses.A_BOLD)
         rows_available = max(0, height - 7)
@@ -388,6 +401,8 @@ class ViewRendererMixin(ViewOverlayMixin):
                 label_width,
                 marker=">" if selected else " ",
                 attr=attr,
+                token_widths=token_widths,
+                bar_width=14,
             )
             y += 1
             rendered += 1
@@ -405,64 +420,246 @@ class ViewRendererMixin(ViewOverlayMixin):
                     label_width,
                     row_key=f"  {model_row.key}",
                     marker=" ",
+                    token_widths=token_widths,
+                    bar_width=14,
                 )
                 y += 1
                 rendered += 1
-    def aggregate_header_fields(self) -> str:
+    @staticmethod
+    def _format_token_count(
+        compact: bool,
+        value: int,
+        width: int,
+    ) -> str:
+        if compact:
+            return format_token_count(value, width)
+        return format_int(value)
+
+    def _aggregate_token_widths(self, rows) -> dict[str, int]:
+        if self.options.display.compact_token_counts:
+            return {
+                "sessions": 8,
+                "total": 12,
+                "cached": 12,
+                "cached_percent": 8,
+                "estimated_cost": 10,
+                "miss": 12,
+                "reason": 10,
+            }
+        aggregate_rows = tuple(rows)
+        return {
+            "sessions": max(
+                (len("sessions"), *(len(format_int(row.sessions)) for row in aggregate_rows)),
+            ),
+            "total": max(
+                (
+                    len("total"),
+                    *(len(format_int(row.tokens.total_tokens)) for row in aggregate_rows),
+                ),
+            ),
+            "cached": max(
+                (
+                    len("cached"),
+                    *(len(format_int(row.tokens.cached_input_tokens)) for row in aggregate_rows),
+                ),
+            ),
+            "cached_percent": 8,
+            "estimated_cost": 10,
+            "miss": max(
+                (
+                    len("miss"),
+                    *(
+                        len(format_int(row.tokens.cache_miss_input_tokens))
+                        for row in aggregate_rows
+                    ),
+                ),
+            ),
+            "reason": max(
+                (
+                    len("reason"),
+                    *(
+                        len(format_int(row.tokens.reasoning_output_tokens))
+                        for row in aggregate_rows
+                    ),
+                ),
+            ),
+        }
+
+    def _session_token_widths(self, sessions) -> dict[str, int]:
+        if self.options.display.compact_token_counts:
+            return {
+                "total": 10,
+                "cached": 10,
+                "cached_percent": 8,
+                "estimated_cost": 10,
+                "reasoning_level": 8,
+                "miss": 10,
+                "reason": 8,
+            }
+        session_rows = tuple(sessions)
+        return {
+            "total": max(
+                (
+                    len("total"),
+                    *(len(format_int(session.tokens.total_tokens)) for session in session_rows),
+                ),
+            ),
+            "cached": max(
+                (
+                    len("cached"),
+                    *(
+                        len(format_int(session.tokens.cached_input_tokens))
+                        for session in session_rows
+                    ),
+                ),
+            ),
+            "cached_percent": 8,
+            "estimated_cost": 10,
+            "reasoning_level": 8,
+            "miss": max(
+                (
+                    len("miss"),
+                    *(
+                        len(format_int(session.tokens.cache_miss_input_tokens))
+                        for session in session_rows
+                    ),
+                ),
+            ),
+            "reason": max(
+                (
+                    len("reason"),
+                    *(
+                        len(format_int(session.tokens.reasoning_output_tokens))
+                        for session in session_rows
+                    ),
+                ),
+            ),
+        }
+
+    def aggregate_header_fields(self, token_widths: dict[str, int] | None = None) -> str:
         fields: list[tuple[str, int]] = [
-            ("sessions", 8),
-            ("total", 12),
+            ("sessions", token_widths["sessions"] if token_widths else 8),
+            ("total", token_widths["total"] if token_widths else 12),
         ]
         if self.options.display.show_cached_tokens:
-            fields.append(("cached", 12))
+            fields.append(("cached", token_widths["cached"] if token_widths else 12))
         if self.options.display.show_cached_percent:
-            fields.append(("cached%", 8))
+            fields.append(("cached%", token_widths["cached_percent"] if token_widths else 8))
         if self.options.display.show_estimated_cost:
-            fields.append(("est $", 10))
+            fields.append(("est $", token_widths["estimated_cost"] if token_widths else 10))
         if self.options.display.show_cache_miss:
-            fields.append(("miss", 12))
+            fields.append(("miss", token_widths["miss"] if token_widths else 12))
         if self.options.display.show_reasoning_tokens:
-            fields.append(("reason", 10))
+            fields.append(("reason", token_widths["reason"] if token_widths else 10))
         return self.right_aligned_fields(fields)
-    def aggregate_value_fields(self, row) -> str:
+
+    def aggregate_value_fields(
+        self,
+        row,
+        token_widths: dict[str, int] | None = None,
+    ) -> str:
+        total_width = 12 if token_widths is None else token_widths["total"]
+        cached_width = 12 if token_widths is None else token_widths["cached"]
+        miss_width = 12 if token_widths is None else token_widths["miss"]
+        reason_width = 10 if token_widths is None else token_widths["reason"]
         fields: list[tuple[str, int]] = [
-            (format_int(row.sessions), 8),
-            (format_int(row.tokens.total_tokens), 12),
+            (format_int(row.sessions), token_widths["sessions"] if token_widths else 8),
+            (
+                self._format_token_count(
+                    self.options.display.compact_token_counts,
+                    row.tokens.total_tokens,
+                    total_width,
+                ),
+                total_width,
+            ),
         ]
         if self.options.display.show_cached_tokens:
-            fields.append((format_int(row.tokens.cached_input_tokens), 12))
+            fields.append(
+                (
+                    self._format_token_count(
+                        self.options.display.compact_token_counts,
+                        row.tokens.cached_input_tokens,
+                        cached_width,
+                    ),
+                    cached_width,
+                ),
+            )
         if self.options.display.show_cached_percent:
             fields.append((format_percent(row.tokens.cached_input_percent), 8))
         if self.options.display.show_estimated_cost:
             fields.append((format_cost(row.estimated_cost), 10))
         if self.options.display.show_cache_miss:
-            fields.append((format_int(row.tokens.cache_miss_input_tokens), 12))
+            fields.append(
+                (
+                    self._format_token_count(
+                        self.options.display.compact_token_counts,
+                        row.tokens.cache_miss_input_tokens,
+                        miss_width,
+                    ),
+                    miss_width,
+                ),
+            )
         if self.options.display.show_reasoning_tokens:
-            fields.append((format_int(row.tokens.reasoning_output_tokens), 10))
+            fields.append(
+                (
+                    self._format_token_count(
+                        self.options.display.compact_token_counts,
+                        row.tokens.reasoning_output_tokens,
+                        reason_width,
+                    ),
+                    reason_width,
+                ),
+            )
         return self.right_aligned_fields(fields)
-    def session_header_fields(self) -> str:
+
+    def session_header_fields(self, token_widths: dict[str, int] | None = None) -> str:
         fields: list[tuple[str, int]] = [
-            ("total", 10),
+            ("total", token_widths["total"] if token_widths else 10),
         ]
         if self.options.display.show_cached_tokens:
-            fields.append(("cached", 10))
+            fields.append(("cached", token_widths["cached"] if token_widths else 10))
         if self.options.display.show_cached_percent:
-            fields.append(("cached%", 8))
+            fields.append(("cached%", token_widths["cached_percent"] if token_widths else 8))
         if self.options.display.show_estimated_cost:
-            fields.append(("est $", 10))
+            fields.append(("est $", token_widths["estimated_cost"] if token_widths else 10))
         if self.options.display.show_reasoning_level:
             fields.append(("effort", 8))
         if self.options.display.show_cache_miss:
-            fields.append(("miss", 10))
+            fields.append(("miss", token_widths["miss"] if token_widths else 10))
         if self.options.display.show_reasoning_tokens:
-            fields.append(("reason", 8))
+            fields.append(("reason", token_widths["reason"] if token_widths else 8))
         return self.right_aligned_fields(fields)
-    def session_value_fields(self, session: SessionUsage) -> str:
+
+    def session_value_fields(
+        self,
+        session: SessionUsage,
+        token_widths: dict[str, int] | None = None,
+    ) -> str:
+        total_width = 10 if token_widths is None else token_widths["total"]
+        cached_width = 10 if token_widths is None else token_widths["cached"]
+        miss_width = 10 if token_widths is None else token_widths["miss"]
+        reason_width = 8 if token_widths is None else token_widths["reason"]
         fields: list[tuple[str, int]] = [
-            (format_int(session.tokens.total_tokens), 10),
+            (
+                self._format_token_count(
+                    self.options.display.compact_token_counts,
+                    session.tokens.total_tokens,
+                    total_width,
+                ),
+                total_width,
+            ),
         ]
         if self.options.display.show_cached_tokens:
-            fields.append((format_int(session.tokens.cached_input_tokens), 10))
+            fields.append(
+                (
+                    self._format_token_count(
+                        self.options.display.compact_token_counts,
+                        session.tokens.cached_input_tokens,
+                        cached_width,
+                    ),
+                    cached_width,
+                ),
+            )
         if self.options.display.show_cached_percent:
             fields.append((format_percent(session.tokens.cached_input_percent), 8))
         if self.options.display.show_estimated_cost:
@@ -472,9 +669,27 @@ class ViewRendererMixin(ViewOverlayMixin):
         if self.options.display.show_reasoning_level:
             fields.append((truncate(session.reasoning_level, 8), 8))
         if self.options.display.show_cache_miss:
-            fields.append((format_int(session.tokens.cache_miss_input_tokens), 10))
+            fields.append(
+                (
+                    self._format_token_count(
+                        self.options.display.compact_token_counts,
+                        session.tokens.cache_miss_input_tokens,
+                        miss_width,
+                    ),
+                    miss_width,
+                ),
+            )
         if self.options.display.show_reasoning_tokens:
-            fields.append((format_int(session.tokens.reasoning_output_tokens), 8))
+            fields.append(
+                (
+                    self._format_token_count(
+                        self.options.display.compact_token_counts,
+                        session.tokens.reasoning_output_tokens,
+                        reason_width,
+                    ),
+                    reason_width,
+                ),
+            )
         return self.right_aligned_fields(fields)
 
     @staticmethod
@@ -501,10 +716,12 @@ class ViewRendererMixin(ViewOverlayMixin):
         forecast_window: ForecastWindow | None = None,
         label_width: int = 16,
     ) -> None:
+        rows = tuple(rows)
+        token_widths = self._aggregate_token_widths(rows)
         max_total = max((row.tokens.total_tokens for row in rows), default=0)
         header = (
             f"{label:<{label_width}} {'usage':<14} "
-            f"{self.aggregate_header_fields()}"
+            f"{self.aggregate_header_fields(token_widths)}"
         )
         if forecast_window and forecast_window.enabled and label == "week":
             header += " forecast"
@@ -518,6 +735,8 @@ class ViewRendererMixin(ViewOverlayMixin):
                 width,
                 label_width,
                 forecast_window,
+                token_widths=token_widths,
+                bar_width=14,
             )
 
     def render_usage_row(
@@ -531,6 +750,8 @@ class ViewRendererMixin(ViewOverlayMixin):
         forecast_window: ForecastWindow | None = None,
         row_key: str | None = None,
         marker: str | None = None,
+        token_widths: dict[str, int] | None = None,
+        bar_width: int = 14,
         attr: int = 0,
     ) -> None:
         key = row.key if row_key is None else row_key
@@ -539,7 +760,10 @@ class ViewRendererMixin(ViewOverlayMixin):
             prefix = f"{display_key:<{label_width}} "
         else:
             prefix = f"{marker}{display_key:<{label_width}} "
-        suffix = " " + self.aggregate_value_fields(row)
+        if label == "session":
+            suffix = " " + self.session_value_fields(row, token_widths)
+        else:
+            suffix = " " + self.aggregate_value_fields(row, token_widths)
         status = usage_row_forecast_status(label, row.key, forecast_window)
         if status:
             suffix += f" {status}"
@@ -549,17 +773,18 @@ class ViewRendererMixin(ViewOverlayMixin):
             len(prefix),
             row.tokens.total_tokens,
             max_total,
-            14,
+            bar_width,
             attr,
         )
         self.safe_addstr(
             y,
-            len(prefix) + 14,
-            suffix[: max(0, width - len(prefix) - 14)],
+            len(prefix) + bar_width,
+            suffix[: max(0, width - len(prefix) - bar_width)],
             attr,
         )
     def render_sessions(self, height: int, width: int) -> None:
         sessions = self.state.visible_sessions()
+        token_widths = self._session_token_widths(sessions)
         max_total = max((session.tokens.total_tokens for session in sessions), default=0)
         rows_available = max(0, height - 7)
         start_index = visible_start(self.state.selected_index, rows_available, len(sessions))
@@ -567,7 +792,7 @@ class ViewRendererMixin(ViewOverlayMixin):
             width,
             self.options.display.model_column_width,
         )
-        header = f"{'session':<12} {'usage':<10} {self.session_header_fields()}"
+        header = f"{'session':<12} {'usage':<10} {self.session_header_fields(token_widths)}"
         if self.options.display.show_model:
             header += f"  {'model':<{model_width}}"
         if self.options.display.show_context:
@@ -581,7 +806,7 @@ class ViewRendererMixin(ViewOverlayMixin):
             prefix = (
                 f"{marker}{session.session_id[:12]:<12} "
             )
-            suffix = " " + self.session_value_fields(session)
+            suffix = " " + self.session_value_fields(session, token_widths)
             if self.options.display.show_model:
                 suffix += f"  {truncate(session.model, model_width):<{model_width}}"
             if self.options.display.show_context:
@@ -678,9 +903,10 @@ class ViewRendererMixin(ViewOverlayMixin):
             max(16, max((len(row.key) for row in project.models), default=5)),
             max(16, width // 3),
         )
+        token_widths = self._aggregate_token_widths(project.models)
         header = (
             f"{'model':<{model_width}} {'usage':<14} "
-            f"{self.aggregate_header_fields()}"
+            f"{self.aggregate_header_fields(token_widths)}"
         )
         self.render_themed_text(table_y, 0, header[: max(0, width - 1)], curses.A_BOLD)
         max_total = max((row.tokens.total_tokens for row in project.models), default=0)
@@ -693,4 +919,6 @@ class ViewRendererMixin(ViewOverlayMixin):
                 max_total,
                 width,
                 model_width,
+                token_widths=token_widths,
+                bar_width=14,
             )

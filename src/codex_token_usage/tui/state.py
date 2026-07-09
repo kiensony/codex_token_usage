@@ -19,6 +19,7 @@ VIEWS = (
     "weekly",
     "monthly",
     "hourly",
+    "models",
     "projects",
     "sessions",
     "details",
@@ -30,6 +31,7 @@ TAB_VIEWS = (
     "weekly",
     "monthly",
     "hourly",
+    "models",
     "projects",
     "sessions",
 )
@@ -40,6 +42,7 @@ VIEW_LABELS = {
     "weekly": "By Week",
     "monthly": "By Month",
     "hourly": "By Hour",
+    "models": "By Model",
     "projects": "By Project",
     "sessions": "By Session",
     "details": "Details",
@@ -428,6 +431,12 @@ class TuiState:
         dataset = replace(self.dataset, sessions=tuple(self.visible_sessions()))
         return self.sorted_report_rows(
             make_report_rows(dataset, group_by="hour", pricing=self.pricing)
+        )
+
+    def model_rows(self):
+        dataset = replace(self.dataset, sessions=tuple(self.visible_sessions()))
+        return self.sorted_report_rows(
+            make_report_rows(dataset, group_by="model", pricing=self.pricing)
         )
 
     def project_rows(self):

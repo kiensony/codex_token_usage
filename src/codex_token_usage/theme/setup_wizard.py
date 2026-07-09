@@ -84,6 +84,12 @@ def run_setup_wizard(
         write("")
         write("Display columns:")
         next_display = DisplayConfig(
+            compact_token_counts=prompt_bool(
+                "Compact token values (like 1.2B)",
+                current_display.compact_token_counts,
+                input_fn,
+                write,
+            ),
             show_cached_percent=prompt_bool(
                 "Show cached input percentage",
                 current_display.show_cached_percent,

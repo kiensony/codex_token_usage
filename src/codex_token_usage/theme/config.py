@@ -116,6 +116,7 @@ def parse_display_config(raw: object) -> DisplayConfig:
         show_reasoning_level=parse_bool(display.get("show_reasoning_level", True)),
         show_cache_miss=parse_bool(display.get("show_cache_miss", True)),
         show_reasoning_tokens=parse_bool(display.get("show_reasoning_tokens", True)),
+        compact_token_counts=parse_bool(display.get("compact_token_counts", False)),
         show_model=parse_bool(display.get("show_model", True)),
         show_context=parse_bool(display.get("show_context", True)),
         model_column_width=parse_model_column_width(
@@ -268,6 +269,7 @@ def save_theme_config(
             "show_cached_percent": display_config.show_cached_percent,
             "show_context": display_config.show_context,
             "show_estimated_cost": display_config.show_estimated_cost,
+            "compact_token_counts": display_config.compact_token_counts,
             "show_model": display_config.show_model,
             "show_reasoning_level": display_config.show_reasoning_level,
             "show_reasoning_tokens": display_config.show_reasoning_tokens,
