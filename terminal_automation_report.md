@@ -1135,3 +1135,1093 @@ session token usage
 long-session | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
 ```
 
+## empty codex home
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_empty --format table 
+```
+exit-code: 0
+date  sessions  total  input  output  cached  cached_percent  cache_miss  reasoning
+----  --------  -----  -----  ------  ------  --------------  ----------  ---------
+```
+
+## invalid forecast negative values
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format table --group-by week --five-hour-token-limit -1 --weekly-token-limit -1 
+```
+exit-code: 2
+usage: codex-token-usage [-h] [--codex-home CODEX_HOME]
+                         [--format {table,json,csv,graph}] [-c]
+                         [--theme {rainbow,transgender,nonbinary,xenogender,agender,queer,genderfluid,bisexual,pansexual,polysexual,omnisexual,omniromantic,gay-men,lesbian,abrosexual,asexual,aromantic,fictosexual,aroace1,aroace2,aroace3,demisexual,autosexual,intergender,greygender,akiosexual,bigender,demigender,demiboy,demigirl,transmasculine,transfeminine,genderfaun,demifaun,genderfae,demifae,neutrois,biromantic1,biromantic2,autoromantic,boyflux2,girlflux,genderflux,nullflux,hypergender,hyperboy,hypergirl,hyperandrogyne,hyperneutrois,finsexual,unlabeled1,unlabeled2,pangender,pangender.contrast,gendernonconforming1,gendernonconforming2,femboy,tomboy,gynesexual,androsexual,gendervoid,voidgirl,voidboy,nonhuman-unity,plural,fraysexual,bear,butch,femme,leather,otter,twink,adipophilia,kenochoric,veldian,solian,lunian,polyam,sapphic,androgyne,interprogress,progress,intersex,old-polyam,equal-rights,drag,pronounfluid,pronounflux,exipronoun,neopronoun,neofluid,genderqueer,cisgender,baker,caninekin,libragender,librafeminine,libramasculine,libraandrogyne,libranonbinary,fluidflux1,fluidflux2,transbian,autism,cenelian,transneutral,enbian,paragender,paraboy,paragirl,paranonbinary,paragenderalt,paraboyalt,paragirlalt,paranonbinaryalt,cupiorose,cupioromantic,cupiosexual,beiyang,burger,throatlozenges,band,petergriffin,rubber,haruhi,queervillain,trans,nonhuman-unit,ynullflux,all,plain,disabled,none}]
+                         [--color {auto,always,never}] [--lightness LIGHTNESS]
+                         [--since SINCE] [--until UNTIL]
+                         [--group-by {date,week,month,hour,session,day,model,cwd,project,folder}]
+                         [--top TOP] [--include-zero]
+                         [--five-hour-token-limit FIVE_HOUR_TOKEN_LIMIT]
+                         [--weekly-token-limit WEEKLY_TOKEN_LIMIT]
+codex-token-usage: error: argument --five-hour-token-limit: token limit must not be negative
+```
+
+## theme value loop
+
+## --theme=rainbow
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=transgender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme transgender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=nonbinary
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme nonbinary --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=xenogender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme xenogender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=agender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme agender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=queer
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme queer --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=genderfluid
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme genderfluid --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=bisexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme bisexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=pansexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme pansexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=polysexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme polysexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=omnisexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme omnisexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=omniromantic
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme omniromantic --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=gay-men
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme gay-men --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=lesbian
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme lesbian --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=abrosexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme abrosexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=asexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme asexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=aromantic
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme aromantic --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=fictosexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme fictosexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=aroace1
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme aroace1 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=aroace2
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme aroace2 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=aroace3
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme aroace3 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=demisexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme demisexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=autosexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme autosexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=intergender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme intergender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=greygender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme greygender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=akiosexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme akiosexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=bigender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme bigender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=demigender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme demigender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=demiboy
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme demiboy --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=demigirl
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme demigirl --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=transmasculine
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme transmasculine --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=transfeminine
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme transfeminine --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=genderfaun
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme genderfaun --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=demifaun
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme demifaun --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=genderfae
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme genderfae --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=demifae
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme demifae --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=neutrois
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme neutrois --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=biromantic1
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme biromantic1 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=biromantic2
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme biromantic2 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=autoromantic
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme autoromantic --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=boyflux2
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme boyflux2 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=girlflux
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme girlflux --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=genderflux
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme genderflux --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=nullflux
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme nullflux --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=hypergender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme hypergender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=hyperboy
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme hyperboy --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=hypergirl
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme hypergirl --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=hyperandrogyne
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme hyperandrogyne --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=hyperneutrois
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme hyperneutrois --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=finsexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme finsexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=unlabeled1
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme unlabeled1 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=unlabeled2
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme unlabeled2 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=pangender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme pangender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=pangender.contrast
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme pangender.contrast --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=gendernonconforming1
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme gendernonconforming1 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=gendernonconforming2
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme gendernonconforming2 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=femboy
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme femboy --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=tomboy
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme tomboy --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=gynesexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme gynesexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=androsexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme androsexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=gendervoid
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme gendervoid --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=voidgirl
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme voidgirl --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=voidboy
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme voidboy --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=nonhuman-unity
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme nonhuman-unity --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=plural
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme plural --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=fraysexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme fraysexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=bear
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme bear --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=butch
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme butch --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=femme
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme femme --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=leather
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme leather --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=otter
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme otter --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=twink
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme twink --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=adipophilia
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme adipophilia --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=kenochoric
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme kenochoric --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=veldian
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme veldian --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=solian
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme solian --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=lunian
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme lunian --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=polyam
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme polyam --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=sapphic
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme sapphic --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=androgyne
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme androgyne --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=interprogress
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme interprogress --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=progress
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme progress --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=intersex
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme intersex --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=old-polyam
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme old-polyam --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=equal-rights
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme equal-rights --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=drag
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme drag --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=pronounfluid
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme pronounfluid --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=pronounflux
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme pronounflux --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=exipronoun
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme exipronoun --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=neopronoun
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme neopronoun --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=neofluid
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme neofluid --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=genderqueer
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme genderqueer --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=cisgender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme cisgender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=baker
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme baker --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=caninekin
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme caninekin --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=libragender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme libragender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=librafeminine
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme librafeminine --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=libramasculine
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme libramasculine --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=libraandrogyne
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme libraandrogyne --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=libranonbinary
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme libranonbinary --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=fluidflux1
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme fluidflux1 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=fluidflux2
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme fluidflux2 --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=transbian
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme transbian --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=autism
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme autism --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=cenelian
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme cenelian --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=transneutral
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme transneutral --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=enbian
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme enbian --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=paragender
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme paragender --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=paraboy
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme paraboy --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=paragirl
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme paragirl --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=paranonbinary
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme paranonbinary --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=paragenderalt
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme paragenderalt --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=paraboyalt
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme paraboyalt --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=paragirlalt
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme paragirlalt --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=paranonbinaryalt
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme paranonbinaryalt --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=cupiorose
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme cupiorose --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=cupioromantic
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme cupioromantic --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=cupiosexual
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme cupiosexual --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=beiyang
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme beiyang --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=burger
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme burger --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=throatlozenges
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme throatlozenges --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=band
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme band --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=petergriffin
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme petergriffin --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=rubber
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rubber --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=haruhi
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme haruhi --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=queervillain
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme queervillain --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=trans
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme trans --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=nonhuman-unit
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme nonhuman-unit --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=ynullflux
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme ynullflux --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=all
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme all --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=plain
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme plain --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=disabled
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme disabled --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
+## --theme=none
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme none --group-by model --top 1
+```
+exit-code: 0
+model token usage
+gpt-5 | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
