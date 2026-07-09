@@ -979,3 +979,159 @@ usage: codex-token-usage [-h] [--codex-home CODEX_HOME]
 codex-token-usage: error: --since must be on or before --until
 ```
 
+## Settings-level sweep (extended)
+## no format flag (interactive? should open tui -> likely non-zero)
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --group-by session --since 2026-06-01 --until 2026-06-02 
+```
+exit-code: 1
+[?1049h[22;0;0t[1;24r(B[m[4l[?7h[?1l>Traceback (most recent call last):
+  File "/home/foo/miniconda3/lib/python3.13/curses/__init__.py", line 78, in wrapper
+    cbreak()
+    ~~~~~~^^
+_curses.error: cbreak() returned ERR
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/foo/Desktop/Repos/token_usage/src/codex_token_usage/__main__.py", line 5, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/home/foo/Desktop/Repos/token_usage/src/codex_token_usage/cli.py", line 182, in main
+    return run_tui(
+        TuiOptions(
+    ...<13 lines>...
+        )
+    )
+  File "/home/foo/Desktop/Repos/token_usage/src/codex_token_usage/tui/app.py", line 43, in run_tui
+    curses.wrapper(lambda stdscr: CursesUi(stdscr, state, options).run())
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/foo/miniconda3/lib/python3.13/curses/__init__.py", line 100, in wrapper
+    nocbreak()
+    ~~~~~~~~^^
+_curses.error: nocbreak() returned ERR
+```
+
+## color=never graph
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --color never --group-by model 
+```
+exit-code: 0
+model token usage
+gpt-5   | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+gpt-4.1 | #                                        total 120,000  cached 25,000  cached% 25.0%  miss 75,000
+```
+
+## graph color=auto
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --color auto --group-by model 
+```
+exit-code: 0
+model token usage
+gpt-5   | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+gpt-4.1 | #                                        total 120,000  cached 25,000  cached% 25.0%  miss 75,000
+```
+
+## graph color=never
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --color never --group-by model 
+```
+exit-code: 0
+model token usage
+gpt-5   | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+gpt-4.1 | #                                        total 120,000  cached 25,000  cached% 25.0%  miss 75,000
+```
+
+## graph color=always
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --color always --group-by model 
+```
+exit-code: 0
+model token usage
+gpt-5   | [38;5;160m#######[0m[38;5;214m#######[0m[38;5;226m######[0m[38;5;35m#######[0m[38;5;27m#######[0m[38;5;91m######[0m total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+gpt-4.1 | [38;5;160m#[0m                                        total 120,000  cached 25,000  cached% 25.0%  miss 75,000
+```
+
+## invalid color value
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --color wrong --group-by model 
+```
+exit-code: 2
+usage: codex-token-usage [-h] [--codex-home CODEX_HOME]
+                         [--format {table,json,csv,graph}] [-c]
+                         [--theme {rainbow,transgender,nonbinary,xenogender,agender,queer,genderfluid,bisexual,pansexual,polysexual,omnisexual,omniromantic,gay-men,lesbian,abrosexual,asexual,aromantic,fictosexual,aroace1,aroace2,aroace3,demisexual,autosexual,intergender,greygender,akiosexual,bigender,demigender,demiboy,demigirl,transmasculine,transfeminine,genderfaun,demifaun,genderfae,demifae,neutrois,biromantic1,biromantic2,autoromantic,boyflux2,girlflux,genderflux,nullflux,hypergender,hyperboy,hypergirl,hyperandrogyne,hyperneutrois,finsexual,unlabeled1,unlabeled2,pangender,pangender.contrast,gendernonconforming1,gendernonconforming2,femboy,tomboy,gynesexual,androsexual,gendervoid,voidgirl,voidboy,nonhuman-unity,plural,fraysexual,bear,butch,femme,leather,otter,twink,adipophilia,kenochoric,veldian,solian,lunian,polyam,sapphic,androgyne,interprogress,progress,intersex,old-polyam,equal-rights,drag,pronounfluid,pronounflux,exipronoun,neopronoun,neofluid,genderqueer,cisgender,baker,caninekin,libragender,librafeminine,libramasculine,libraandrogyne,libranonbinary,fluidflux1,fluidflux2,transbian,autism,cenelian,transneutral,enbian,paragender,paraboy,paragirl,paranonbinary,paragenderalt,paraboyalt,paragirlalt,paranonbinaryalt,cupiorose,cupioromantic,cupiosexual,beiyang,burger,throatlozenges,band,petergriffin,rubber,haruhi,queervillain,trans,nonhuman-unit,ynullflux,all,plain,disabled,none}]
+                         [--color {auto,always,never}] [--lightness LIGHTNESS]
+                         [--since SINCE] [--until UNTIL]
+                         [--group-by {date,week,month,hour,session,day,model,cwd,project,folder}]
+                         [--top TOP] [--include-zero]
+                         [--five-hour-token-limit FIVE_HOUR_TOKEN_LIMIT]
+                         [--weekly-token-limit WEEKLY_TOKEN_LIMIT]
+codex-token-usage: error: argument --color: invalid choice: 'wrong' (choose from auto, always, never)
+```
+
+## lightness=0.0
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --color always --lightness 0.0 --group-by model 
+```
+exit-code: 0
+model token usage
+gpt-5   | [38;5;16m#######[0m[38;5;16m#######[0m[38;5;16m######[0m[38;5;16m#######[0m[38;5;16m#######[0m[38;5;16m######[0m total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+gpt-4.1 | [38;5;16m#[0m                                        total 120,000  cached 25,000  cached% 25.0%  miss 75,000
+```
+
+## lightness=0.5
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --color always --lightness 0.5 --group-by model 
+```
+exit-code: 0
+model token usage
+gpt-5   | [38;5;88m#######[0m[38;5;130m#######[0m[38;5;136m######[0m[38;5;22m#######[0m[38;5;25m#######[0m[38;5;53m######[0m total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+gpt-4.1 | [38;5;88m#[0m                                        total 120,000  cached 25,000  cached% 25.0%  miss 75,000
+```
+
+## lightness=1.0
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --color always --lightness 1.0 --group-by model 
+```
+exit-code: 0
+model token usage
+gpt-5   | [38;5;160m#######[0m[38;5;214m#######[0m[38;5;226m######[0m[38;5;35m#######[0m[38;5;27m#######[0m[38;5;91m######[0m total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+gpt-4.1 | [38;5;160m#[0m                                        total 120,000  cached 25,000  cached% 25.0%  miss 75,000
+```
+
+## invalid lightness out of range
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --theme rainbow --lightness 1.5 --group-by model 
+```
+exit-code: 2
+usage: codex-token-usage [-h] [--codex-home CODEX_HOME]
+                         [--format {table,json,csv,graph}] [-c]
+                         [--theme {rainbow,transgender,nonbinary,xenogender,agender,queer,genderfluid,bisexual,pansexual,polysexual,omnisexual,omniromantic,gay-men,lesbian,abrosexual,asexual,aromantic,fictosexual,aroace1,aroace2,aroace3,demisexual,autosexual,intergender,greygender,akiosexual,bigender,demigender,demiboy,demigirl,transmasculine,transfeminine,genderfaun,demifaun,genderfae,demifae,neutrois,biromantic1,biromantic2,autoromantic,boyflux2,girlflux,genderflux,nullflux,hypergender,hyperboy,hypergirl,hyperandrogyne,hyperneutrois,finsexual,unlabeled1,unlabeled2,pangender,pangender.contrast,gendernonconforming1,gendernonconforming2,femboy,tomboy,gynesexual,androsexual,gendervoid,voidgirl,voidboy,nonhuman-unity,plural,fraysexual,bear,butch,femme,leather,otter,twink,adipophilia,kenochoric,veldian,solian,lunian,polyam,sapphic,androgyne,interprogress,progress,intersex,old-polyam,equal-rights,drag,pronounfluid,pronounflux,exipronoun,neopronoun,neofluid,genderqueer,cisgender,baker,caninekin,libragender,librafeminine,libramasculine,libraandrogyne,libranonbinary,fluidflux1,fluidflux2,transbian,autism,cenelian,transneutral,enbian,paragender,paraboy,paragirl,paranonbinary,paragenderalt,paraboyalt,paragirlalt,paranonbinaryalt,cupiorose,cupioromantic,cupiosexual,beiyang,burger,throatlozenges,band,petergriffin,rubber,haruhi,queervillain,trans,nonhuman-unit,ynullflux,all,plain,disabled,none}]
+                         [--color {auto,always,never}] [--lightness LIGHTNESS]
+                         [--since SINCE] [--until UNTIL]
+                         [--group-by {date,week,month,hour,session,day,model,cwd,project,folder}]
+                         [--top TOP] [--include-zero]
+                         [--five-hour-token-limit FIVE_HOUR_TOKEN_LIMIT]
+                         [--weekly-token-limit WEEKLY_TOKEN_LIMIT]
+codex-token-usage: error: argument --lightness: lightness must be from 0 to 1
+```
+
+## forecast limits zero disabled
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format table --group-by week --five-hour-token-limit 0 --weekly-token-limit 0 
+```
+exit-code: 0
+week      sessions  total              input              output     cached           cached_percent  cache_miss       reasoning
+--------  --------  -----------------  -----------------  ---------  ---------------  --------------  ---------------  ---------
+2026-W23         2  1,050,000,120,000  1,000,000,100,000  5,020,000  820,000,025,000           82.0%  180,000,075,000  3,002,500
+```
+
+## top=0
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format table --group-by session --top 0 
+```
+exit-code: 0
+session       title                model    total              input              output     cached           cached_percent  cache_miss       reasoning  updated
+------------  -------------------  -------  -----------------  -----------------  ---------  ---------------  --------------  ---------------  ---------  -------------------------
+long-session  Long Number Session  gpt-5    1,050,000,000,000  1,000,000,000,000  5,000,000  820,000,000,000           82.0%  180,000,000,000  3,000,000  2026-06-01T00:00:00+00:00
+normal-sessi  Normal Session       gpt-4.1            120,000            100,000     20,000           25,000           25.0%           75,000      2,500  2026-06-02T12:00:00+00:00
+```
+
+## top=1 include-zero+graph
+- command: env PYTHONPATH=src python -m codex_token_usage --codex-home /tmp/codex_token_usage_terminal_check_report --format graph --group-by session --include-zero --top 1 
+```
+exit-code: 0
+session token usage
+long-session | ######################################## total 1,050,000,000,000  cached 820,000,000,000  cached% 82.0%  miss 180,000,000,000
+```
+
