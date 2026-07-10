@@ -95,6 +95,21 @@ class PricingTests(unittest.TestCase):
         self.assertEqual(estimate.unpriced_sessions, 1)
         self.assertTrue(format_cost(estimate).endswith("*"))
 
+    def test_estimate_session_cost_for_gpt_5_6_terra(self) -> None:
+        estimate = estimate_session_cost(
+            session(
+                "priced",
+                "gpt-5.6-terra",
+                TokenBreakdown(
+                    input_tokens=1_000_000,
+                    cached_input_tokens=250_000,
+                    output_tokens=100_000,
+                ),
+            )
+        )
+
+        self.assertAlmostEqual(estimate.usd or 0, 3.4375)
+
     def test_report_rows_include_aggregate_costs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

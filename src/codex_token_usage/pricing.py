@@ -26,7 +26,9 @@ class PricingConfig:
 
 
 # USD per 1M tokens, standard processing, short-context rates where applicable.
-# Refresh from https://developers.openai.com/api/docs/pricing when model prices change.
+# OpenAI GPT-5.6 pricing came from the official preview announcement and preview
+# help-center docs. For GPT-5.6 family models, cached-token rates use a 90%
+# discount (0.10x) for reads, matching the existing cached-token model.
 MODEL_PRICES: dict[str, ModelPrice] = {
     "chat-latest": ModelPrice(5.00, 0.50, 30.00),
     "gpt-5.3-codex": ModelPrice(1.75, 0.175, 14.00),
@@ -35,6 +37,9 @@ MODEL_PRICES: dict[str, ModelPrice] = {
     "gpt-5.4-nano": ModelPrice(0.20, 0.02, 1.25),
     "gpt-5.4-pro": ModelPrice(30.00, None, 180.00),
     "gpt-5.5": ModelPrice(5.00, 0.50, 30.00),
+    "gpt-5.6-luna": ModelPrice(1.00, 0.10, 6.00),
+    "gpt-5.6-sol": ModelPrice(5.00, 0.50, 30.00),
+    "gpt-5.6-terra": ModelPrice(2.50, 0.25, 15.00),
     "gpt-5.5-pro": ModelPrice(30.00, None, 180.00),
 }
 
