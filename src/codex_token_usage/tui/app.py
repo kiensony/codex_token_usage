@@ -3,7 +3,7 @@ from __future__ import annotations
 import curses
 import time
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime, timezone
 
 from ..keybindings import keymap_for_config
 from ..loader import load_usage
@@ -27,15 +27,13 @@ from .views import ViewRendererMixin
 def run_tui(options: TuiOptions) -> int:
     dataset = load_usage(
         codex_home=options.codex_home,
-        since=options.since,
-        until=options.until,
         include_zero=options.include_zero,
     )
     state = TuiState(
         dataset=dataset,
         since=options.since,
         until=options.until,
-        today=date.today(),
+        today=datetime.now(timezone.utc).date(),
         pricing=options.pricing,
         status=options.theme_status,
     )
@@ -202,10 +200,10 @@ class CursesUi(ThemeRendererMixin, PromptMixin, SettingsScreenMixin, ViewRendere
         self.stdscr.refresh()
 
     def reload_dataset(self, since: date | None, until: date | None) -> UsageDataset:
+        # Keep full history so widening a date preset after refresh can restore
+        # older events. TuiState slices the visible usage without discarding it.
         return load_usage(
             codex_home=self.options.codex_home,
-            since=since,
-            until=until,
             include_zero=self.options.include_zero,
         )
 

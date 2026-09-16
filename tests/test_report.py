@@ -5,6 +5,7 @@ import io
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,12 +15,77 @@ from codex_token_usage.models import (
     SessionUsage,
     TokenBreakdown,
     UsageDataset,
+    UsageEvent,
 )
-from codex_token_usage.report import make_report_rows, render_report
+from codex_token_usage.report import filter_sessions, make_report_rows, render_report
 from codex_token_usage.theme import ThemeConfig
 
 
 class ReportTests(unittest.TestCase):
+    def test_unreliable_or_partial_timeline_preserves_final_total(self) -> None:
+        base = session("partial", 300, "2026-09-16T12:00:00+00:00", Path("/tmp"))
+        for event_total in (100, 400):
+            with self.subTest(event_total=event_total):
+                usage = replace(
+                    base, tokens=TokenBreakdown(total_tokens=300),
+                    usage_events=(UsageEvent(
+                        datetime.fromisoformat("2026-08-31T12:00:00+00:00"),
+                        TokenBreakdown(total_tokens=event_total),
+                    ),),
+                )
+                data = replace(sample_dataset(), sessions=(usage,))
+                rows = make_report_rows(data, "date")
+                self.assertEqual(sum(r.tokens.total_tokens for r in rows), 300)
+                self.assertEqual(rows[-1].tokens.total_tokens, 200 if event_total == 100 else 300)
+
+    def test_date_buckets_use_utc_boundaries(self) -> None:
+        at = datetime.fromisoformat("2026-09-17T00:30:00+02:00")
+        usage = replace(
+            sample_dataset().sessions[0],
+            tokens=TokenBreakdown(total_tokens=100),
+            usage_events=(UsageEvent(at, TokenBreakdown(total_tokens=100)),),
+        )
+        data = replace(sample_dataset(), sessions=(usage,))
+        rows = make_report_rows(data, "date")
+        self.assertEqual(rows[0].key, "2026-09-16")
+        selected = filter_sessions(data.sessions, until=datetime(2026, 9, 16).date())
+        self.assertEqual(selected[0].tokens.total_tokens, 100)
+
+    def test_resumed_thread_usage_is_split_across_periods(self) -> None:
+        events = tuple(
+            UsageEvent(datetime.fromisoformat(at), TokenBreakdown(input_tokens=count).normalized())
+            for at, count in (
+                ("2026-08-31T12:00:00+00:00", 3_150_000_000),
+                ("2026-09-16T11:00:00+00:00", 400_000_000),
+                ("2026-09-16T12:00:00+00:00", 450_000_000),
+            )
+        )
+        usage = replace(
+            session("resumed", 4_000_000_000, "2026-09-16T12:00:00+00:00", Path("/tmp")),
+            tokens=TokenBreakdown(input_tokens=4_000_000_000).normalized(),
+            usage_events=events,
+        )
+        data = replace(sample_dataset(), sessions=(usage,))
+        for group_by in ("date", "week", "month", "hour"):
+            with self.subTest(group_by=group_by):
+                rows = make_report_rows(data, group_by)
+                self.assertEqual(sum(r.tokens.input_tokens for r in rows), 4_000_000_000)
+                self.assertTrue(all(r.sessions == 1 for r in rows))
+                expected = [3_150_000_000, 400_000_000, 450_000_000] if group_by == "hour" else [3_150_000_000, 850_000_000]
+                self.assertEqual([r.tokens.input_tokens for r in rows], expected)
+
+        selected = filter_sessions(data.sessions, since=events[1].occurred_at.date())
+        today = replace(data, sessions=tuple(selected))
+        # CLI filtering and report filtering may run twice; never restore lifetime usage.
+        again = filter_sessions(today.sessions, since=events[1].occurred_at.date())
+        self.assertEqual(again[0].tokens.input_tokens, 850_000_000)
+        payload = json.loads(render_report(today, "json", "date"))
+        self.assertEqual(payload["totals"]["input"], 850_000_000)
+        self.assertEqual(payload["rows"][0]["tokens"]["input"], 850_000_000)
+        csv_rows = list(csv.DictReader(io.StringIO(render_report(today, "csv", "date"))))
+        self.assertEqual(csv_rows[0]["input"], "850000000")
+        self.assertIn("850,000,000", render_report(today, "table", "date"))
+
     def test_group_by_date_week_month_hour_day_alias_and_model(self) -> None:
         dataset = sample_dataset()
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import curses
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest import mock
@@ -17,6 +18,7 @@ from codex_token_usage.models import (
     UsageEvent,
 )
 from codex_token_usage.pricing import ModelPrice
+from codex_token_usage.report import filter_sessions
 from codex_token_usage.theme import (
     DisplayConfig,
     PRESET_NAMES,
@@ -98,6 +100,51 @@ from codex_token_usage.tui.secret_codes import (
 
 
 class TuiStateTests(unittest.TestCase):
+    def test_widening_range_after_reload_restores_older_events(self) -> None:
+        base = dataset()
+        resumed = replace(
+            base.sessions[0],
+            tokens=TokenBreakdown(total_tokens=4_000_000_000),
+            usage_events=(
+                usage_event("2026-09-15T12:00:00+00:00", 3_150_000_000),
+                usage_event("2026-09-16T12:00:00+00:00", 850_000_000),
+            ),
+        )
+        full = replace(base, sessions=(resumed,))
+        ui = CursesUi(
+            FakeStdScr([]),
+            TuiState(dataset=full, today=date(2026, 9, 16)),
+            TuiOptions(codex_home=base.codex_home),
+        )
+
+        def reload_usage(codex_home, since=None, until=None, include_zero=False):
+            return replace(full, sessions=tuple(filter_sessions(full.sessions, since, until)))
+
+        with mock.patch("codex_token_usage.tui.app.load_usage", side_effect=reload_usage):
+            ui.handle_key(ord("d"))  # today
+            ui.handle_key(ord("r"))
+            self.assertEqual(ui.state.filtered_totals().total_tokens, 850_000_000)
+            ui.handle_key(ord("d"))  # seven days
+            self.assertEqual(ui.state.filtered_totals().total_tokens, 4_000_000_000)
+
+    def test_today_preset_counts_only_today_in_resumed_thread(self) -> None:
+        events = (
+            usage_event("2026-08-31T12:00:00+00:00", 3_150_000_000),
+            usage_event("2026-09-16T12:00:00+00:00", 850_000_000),
+        )
+        base = dataset()
+        resumed = replace(base.sessions[0],
+            tokens=TokenBreakdown(total_tokens=4_000_000_000),
+            usage_events=events,
+        )
+        state = TuiState(dataset=replace(base, sessions=(resumed,)), today=date(2026, 9, 16))
+        today = state.cycle_date_preset()
+        self.assertEqual(today.filtered_totals().total_tokens, 850_000_000)
+        self.assertEqual(today.selected_session().tokens.total_tokens, 850_000_000)
+        self.assertEqual(today.daily_rows()[0].tokens.total_tokens, 850_000_000)
+        self.assertEqual(today.model_rows()[0].tokens.total_tokens, 850_000_000)
+        self.assertEqual(today.set_all_time().filtered_totals().total_tokens, 4_000_000_000)
+
     def test_view_switching_selection_sort_filter_and_quit(self) -> None:
         state = TuiState(dataset=dataset(), today=date(2026, 6, 29))
 
@@ -1232,6 +1279,17 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(format_token_count(1_000_000_000, 10), "1B")
         self.assertEqual(format_token_count(1_000_000_000_000, 10), "1T")
         self.assertEqual(format_token_count(10_500_000_000, 10), "10.5B")
+
+    def test_compact_token_counts_preserve_integer_trailing_zeros(self) -> None:
+        for value, width, expected in (
+            (10_499, 3, "10K"),
+            (100_499, 4, "100K"),
+            (10_499_000, 3, "10M"),
+            (-10_499, 4, "-10K"),
+            (100_499, 3, "???"),
+        ):
+            with self.subTest(value=value, width=width):
+                self.assertEqual(format_token_count(value, width), expected)
 
     def test_sessions_view_uses_full_token_display_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

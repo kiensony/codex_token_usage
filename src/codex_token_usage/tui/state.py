@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -9,7 +9,8 @@ from ..forecast import LimitConfig, PredictionConfig
 from ..keybindings import KeybindingConfig
 from ..models import SessionUsage, TokenBreakdown, UsageDataset
 from ..pricing import PricingConfig, estimate_session_cost
-from ..report import ReportRow, make_report_rows
+from ..report import ReportRow, filter_sessions, make_report_rows
+from ..usage_windows import slice_session_dates
 from ..theme import DEFAULT_SHUTDOWN_SECONDS, DisplayConfig, ThemeConfig
 
 VIEWS = (
@@ -294,7 +295,7 @@ class TuiState:
     def cycle_date_preset(self) -> "TuiState":
         index = (self.date_preset_index + 1) % len(DATE_PRESETS)
         preset = DATE_PRESETS[index]
-        today = self.today or date.today()
+        today = self.today or datetime.now(timezone.utc).date()
         since: date | None = None
         until: date | None = None
         if preset == "today":
@@ -389,8 +390,10 @@ class TuiState:
     def visible_sessions(self) -> list[SessionUsage]:
         sessions = [
             session
-            for session in self.dataset.sessions
-            if self.matches_filter(session) and self.matches_date(session)
+            for session in filter_sessions(
+                self.dataset.sessions, self.since, self.until, include_zero=True
+            )
+            if self.matches_filter(session)
         ]
         sessions.sort(key=self.sort_key, reverse=self.sort_descending)
         return sessions
@@ -498,12 +501,7 @@ class TuiState:
         return any(needle in field.lower() for field in fields)
 
     def matches_date(self, session: SessionUsage) -> bool:
-        day = session.activity_day
-        if self.since and (day is None or day < self.since):
-            return False
-        if self.until and (day is None or day > self.until):
-            return False
-        return True
+        return slice_session_dates(session, self.since, self.until) is not None
 
     def sort_key(self, session: SessionUsage):
         return session_sort_key(session, self.sort_field, self.pricing)

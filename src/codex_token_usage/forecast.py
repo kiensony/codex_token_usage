@@ -5,6 +5,7 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Iterable
 
 from .models import SessionUsage, UsageDataset
+from .usage_windows import slice_session_window
 
 FIVE_HOUR_WINDOW = timedelta(hours=5)
 DAY_WINDOW = timedelta(days=1)
@@ -253,12 +254,9 @@ def sessions_in_window(
 ) -> list[SessionUsage]:
     selected: list[SessionUsage] = []
     for session in sessions:
-        activity_at = session.activity_at
-        if activity_at is None:
-            continue
-        activity_at = normalize_datetime(activity_at)
-        if window_start <= activity_at <= window_end:
-            selected.append(session)
+        sliced = slice_session_window(session, window_start, window_end)
+        if sliced is not None:
+            selected.append(sliced)
     return selected
 
 
@@ -268,15 +266,20 @@ def elapsed_sample_hours(
     window_end: datetime,
     sample_from_first_event: bool,
 ) -> float:
-    if sample_from_first_event and sessions:
-        first_activity = min(
-            normalize_datetime(session.activity_at)
-            for session in sessions
-            if session.activity_at is not None
-        )
-        start = max(window_start, first_activity)
-    else:
-        start = window_start
+    start = window_start
+    if sample_from_first_event:
+        activity_times: list[datetime] = []
+        for session in sessions:
+            if session.usage_events:
+                activity_times.extend(
+                    normalize_datetime(event.occurred_at)
+                    for event in session.usage_events
+                    if event.tokens.total_tokens > 0
+                )
+            elif session.activity_at is not None:
+                activity_times.append(normalize_datetime(session.activity_at))
+        if activity_times:
+            start = max(window_start, min(activity_times))
     elapsed = (window_end - start).total_seconds() / 3600
     return max(MIN_SAMPLE_HOURS, elapsed)
 

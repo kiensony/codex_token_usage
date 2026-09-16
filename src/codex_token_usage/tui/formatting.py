@@ -28,7 +28,9 @@ def format_token_count(value: int, width: int) -> str:
     unit = units[unit_index]
 
     for decimals in (3, 2, 1, 0):
-        candidate = f"{abs_value:.{decimals}f}".rstrip("0").rstrip(".")
+        candidate = f"{abs_value:.{decimals}f}"
+        if decimals:
+            candidate = candidate.rstrip("0").rstrip(".")
         candidate = f"{sign}{candidate}{unit}"
         if len(candidate) <= width:
             return candidate

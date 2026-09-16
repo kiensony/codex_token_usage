@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from codex_token_usage.models import (
     SessionUsage,
     TokenBreakdown,
     UsageDataset,
+    UsageEvent,
 )
 
 
@@ -119,6 +121,82 @@ class ForecastTests(unittest.TestCase):
         self.assertEqual(prediction(previous, "next_5_hours").projected, 80_000)
         self.assertEqual(prediction(previous, "next_day").projected, 80_000)
 
+    def test_resumed_session_forecasts_only_usage_inside_each_window(self) -> None:
+        sample = dataset(
+            event_session(
+                "resumed",
+                "2026-09-16T12:00:00+00:00",
+                ("2026-09-01T11:00:00+00:00", 3_150_000_000),
+                ("2026-09-16T07:00:00+00:00", 0),
+                ("2026-09-16T08:00:00+00:00", 800_000_000),
+                ("2026-09-16T11:00:00+00:00", 50_000_000),
+            ),
+            loaded_at=dt("2026-09-16T12:00:00+00:00"),
+        )
+
+        forecast = make_usage_forecast(
+            sample,
+            LimitConfig(five_hour_tokens=900_000_000, weekly_tokens=3_000_000_000),
+        )
+
+        self.assertEqual(sample.totals.input_tokens, 4_000_000_000)
+        self.assertEqual(forecast.five_hour.used, 850_000_000)
+        self.assertEqual(forecast.five_hour.remaining, 50_000_000)
+        self.assertEqual(forecast.five_hour.rate_per_hour, 212_500_000)
+        self.assertEqual(forecast.five_hour.projected, 1_062_500_000)
+        self.assertEqual(forecast.five_hour.status, "warning")
+        self.assertEqual(forecast.weekly.used, 850_000_000)
+        self.assertEqual(forecast.weekly.projected, 2_380_000_000)
+        self.assertEqual(forecast.weekly.status, "ok")
+        self.assertEqual(prediction(forecast, "next_5_hours").projected, 1_062_500_000)
+        self.assertEqual(prediction(forecast, "next_day").projected, 5_100_000_000)
+
+        previous = make_usage_forecast(
+            sample,
+            LimitConfig(),
+            prediction=PredictionConfig(algorithm="previous_period"),
+        )
+        for name in ("next_5_hours", "next_day", "next_week"):
+            self.assertEqual(prediction(previous, name).projected, 850_000_000)
+        self.assertEqual(prediction(previous, "next_month").projected, 4_000_000_000)
+
+    def test_event_window_includes_boundaries_despite_future_session_activity(self) -> None:
+        forecast = make_usage_forecast(
+            dataset(
+                event_session(
+                    "spanning",
+                    "2026-09-17T12:00:00+00:00",
+                    ("2026-09-16T06:59:59+00:00", 100),
+                    ("2026-09-16T07:00:00+00:00", 10),
+                    ("2026-09-16T12:00:00+00:00", 20),
+                    ("2026-09-16T12:00:01+00:00", 1_000),
+                ),
+                loaded_at=dt("2026-09-16T12:00:00+00:00"),
+            ),
+            LimitConfig(),
+        )
+
+        self.assertEqual(forecast.five_hour.used, 30)
+        self.assertEqual(forecast.five_hour.rate_per_hour, 6)
+        self.assertEqual(forecast.five_hour.projected, 30)
+
+    def test_recent_metadata_without_usage_does_not_revive_old_tokens(self) -> None:
+        forecast = make_usage_forecast(
+            dataset(
+                event_session(
+                    "inactive",
+                    "2026-09-16T11:00:00+00:00",
+                    ("2026-09-01T11:00:00+00:00", 4_000_000_000),
+                ),
+                loaded_at=dt("2026-09-16T12:00:00+00:00"),
+            ),
+            LimitConfig(),
+        )
+
+        self.assertEqual(forecast.five_hour.used, 0)
+        self.assertEqual(forecast.weekly.used, 0)
+        self.assertEqual(prediction(forecast, "next_day").projected, 0)
+
 
 def dataset(*sessions: SessionUsage, loaded_at: datetime) -> UsageDataset:
     with tempfile.TemporaryDirectory() as tmp:
@@ -147,6 +225,23 @@ def session(session_id: str, total: int, updated_at: str) -> SessionUsage:
 
 def dt(value: str) -> datetime:
     return datetime.fromisoformat(value).astimezone(timezone.utc)
+
+
+def event_session(
+    session_id: str, updated_at: str, *events: tuple[str, int]
+) -> SessionUsage:
+    total = sum(tokens for _, tokens in events)
+    return replace(
+        session(session_id, total, updated_at),
+        tokens=TokenBreakdown(input_tokens=total, total_tokens=total),
+        usage_events=tuple(
+            UsageEvent(
+                occurred_at=dt(occurred_at),
+                tokens=TokenBreakdown(input_tokens=tokens, total_tokens=tokens),
+            )
+            for occurred_at, tokens in events
+        ),
+    )
 
 
 def prediction(forecast, name: str):

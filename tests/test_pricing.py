@@ -108,7 +108,36 @@ class PricingTests(unittest.TestCase):
             )
         )
 
-        self.assertAlmostEqual(estimate.usd or 0, 3.4375)
+        self.assertAlmostEqual(estimate.usd or 0, 2.75)
+
+    def test_current_model_costs_with_cache_and_reasoning(self) -> None:
+        for model, expected in (
+            ("gpt-6-astra", 1.4),
+            (" OpenAI/gpt-6-astra ", 1.4),
+            ("models/gpt-6-astra", 1.4),
+            ("gpt-5.6", 0.56),
+            ("gpt-5.6-sol", 0.56),
+            ("gpt-5.6-terra", 0.314),
+            ("gpt-5.6-luna", 0.0314),
+        ):
+            with self.subTest(model=model):
+                tokens = TokenBreakdown(
+                    input_tokens=100_000,
+                    cached_input_tokens=50_000,
+                    output_tokens=17_000,
+                    reasoning_output_tokens=10_000,
+                ).normalized()
+                usage = session("priced", model, tokens)
+                estimate = estimate_session_cost(usage)
+                self.assertAlmostEqual(estimate.usd, expected)
+                self.assertEqual(usage.tokens.total_tokens, 117_000)
+
+    def test_astra_custom_rates_override_builtin_rates(self) -> None:
+        estimate = estimate_session_cost(
+            session("custom", "gpt-6-astra", TokenBreakdown(input_tokens=100_000)),
+            PricingConfig(model_prices=(("gpt-6-astra", ModelPrice(2, 0.2, 10)),)),
+        )
+        self.assertAlmostEqual(estimate.usd, 0.2)
 
     def test_report_rows_include_aggregate_costs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

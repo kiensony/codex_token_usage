@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from typing import Iterable
 
 from ..models import SessionUsage, TokenBreakdown, UsageDataset
 from ..pricing import CostEstimate, PricingConfig, estimate_session_cost
+from ..usage_windows import session_events, slice_session_dates, utc_datetime
 from .formatting import canonical_group_by, format_datetime, limit_rows
 from .models import TIME_GROUPS, ReportRow
 
@@ -16,12 +18,10 @@ def filter_sessions(
 ) -> list[SessionUsage]:
     filtered: list[SessionUsage] = []
     for session in sessions:
+        session = slice_session_dates(session, since, until)
+        if session is None:
+            continue
         if not include_zero and session.tokens.total_tokens <= 0:
-            continue
-        day = session.activity_day
-        if since and (day is None or day < since):
-            continue
-        if until and (day is None or day > until):
             continue
         filtered.append(session)
     return filtered
@@ -51,7 +51,10 @@ def make_report_rows(
         return limit_rows(rows, top)
 
     grouped: dict[str, tuple[int, TokenBreakdown, float, int, int]] = {}
-    for session in sessions:
+    contributions = (
+        part for session in sessions for part in time_slices(session, group_by)
+    )
+    for session in contributions:
         key = group_key(session, group_by)
         count, tokens, cost, priced_sessions, unpriced_sessions = grouped.get(
             key,
@@ -92,6 +95,36 @@ def make_report_rows(
     else:
         rows.sort(key=lambda row: row.tokens.total_tokens, reverse=True)
     return limit_rows(rows, top)
+
+
+def time_slices(session: SessionUsage, group_by: str) -> list[SessionUsage]:
+    if group_by not in TIME_GROUPS:
+        return [session]
+    events = session_events(session)
+    if not events:
+        return [session]
+    buckets: dict[str, SessionUsage] = {}
+    for event in events:
+        at = utc_datetime(event.occurred_at)
+        part = replace(
+            session,
+            metadata=replace(session.metadata, updated_at=at),
+            tokens=event.tokens,
+            usage_events=(),
+            request_count=event.requests,
+        )
+        key = group_key(part, group_by)
+        previous = buckets.get(key)
+        if previous is not None:
+            part = replace(
+                part,
+                tokens=previous.tokens.add(part.tokens),
+                request_count=previous.request_count + part.request_count,
+            )
+        buckets[key] = part
+    return list(buckets.values())
+
+
 def group_key(session: SessionUsage, group_by: str) -> str:
     group_by = canonical_group_by(group_by)
     if group_by == "date":

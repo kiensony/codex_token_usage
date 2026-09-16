@@ -12,6 +12,62 @@ from codex_token_usage.models import TokenBreakdown
 
 
 class LoaderTests(unittest.TestCase):
+    def test_repeated_astra_snapshots_do_not_multiply_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "astra.jsonl"
+            event = token_event(100_000, 17_000, 90_000, 10_000, 117_000)
+            event["payload"]["info"]["last_token_usage"] = {
+                "input_tokens": 20_000,
+                "output_tokens": 2_000,
+                "total_tokens": 22_000,
+            }
+            write_jsonl(path, [
+                {"type": "turn_context", "payload": {"model": "gpt-6-astra"}},
+                *[event] * 10,
+            ])
+
+            usage = parse_session_jsonl(path)
+
+        self.assertEqual(usage.tokens.total_tokens, 117_000)
+        self.assertEqual(usage.request_count, 1)
+        self.assertEqual(len(usage.usage_events), 1)
+        self.assertEqual(usage.tokens.cache_miss_input_tokens, 10_000)
+        self.assertEqual(sum(e.tokens.total_tokens for e in usage.usage_events), 117_000)
+
+    def test_rate_limit_refresh_does_not_reset_cumulative_baseline(self) -> None:
+        for info in (None, {}, {"total_token_usage": None}, {"total_token_usage": {}}, {"token_count": {}}):
+            with self.subTest(info=info), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "session.jsonl"
+                refresh = {"type": "event_msg", "payload": {"type": "token_count", "info": info}}
+                write_jsonl(path, [
+                    token_event(100, 10, 50, 5, 110),
+                    refresh,
+                    token_event(200, 20, 100, 10, 220),
+                    refresh,
+                ])
+                usage = parse_session_jsonl(path)
+                self.assertEqual(usage.tokens.total_tokens, 220)
+                self.assertEqual(sum(e.tokens.total_tokens for e in usage.usage_events), 220)
+                self.assertEqual(usage.request_count, 2)
+
+    def test_date_range_counts_only_new_tokens_in_resumed_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "sessions").mkdir()
+            write_jsonl(root / "sessions" / "resumed.jsonl", [
+                {"type": "session_meta", "payload": {"id": "resumed", "model": "gpt-6-astra"}},
+                token_event(3_150_000_000, 0, 0, 0, 3_150_000_000, "2026-08-31T12:00:00Z"),
+                token_event(4_000_000_000, 0, 0, 0, 4_000_000_000, "2026-09-16T12:00:00Z"),
+            ])
+            all_time = load_usage(root)
+            today = load_usage(root, since=date(2026, 9, 16), until=date(2026, 9, 16))
+            past = load_usage(root, until=date(2026, 8, 31))
+
+        self.assertEqual(all_time.totals.input_tokens, 4_000_000_000)
+        self.assertEqual(today.totals.input_tokens, 850_000_000)
+        self.assertEqual(today.sessions[0].request_count, 1)
+        self.assertEqual(past.totals.input_tokens, 3_150_000_000)
+
     def test_final_cumulative_token_count_event_is_counted_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "session-1.jsonl"

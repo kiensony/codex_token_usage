@@ -2,7 +2,7 @@
 
 `codex-token-usage` is a dependency-free local Python app for inspecting Codex CLI token usage. By default it opens a full-screen `curses` TUI. It also supports table, JSON, and CSV output for scripts.
 
-The authoritative token source is `~/.codex/sessions/**/*.jsonl`. For each session, only the last cumulative `token_count` event is counted. The app optionally reads `~/.codex/state_5.sqlite` in read-only mode for safe metadata such as model, working directory, title, and timestamps.
+The authoritative token source is `~/.codex/sessions/**/*.jsonl`. For each session, the last valid cumulative `token_count` event supplies the all-time total. Date filters, time groups, and forecasts use the increments between those records at their recorded times (UTC). Resuming a thread does not charge its earlier usage to the new period. The app optionally reads `~/.codex/state_5.sqlite` in read-only mode for safe metadata such as model, working directory, title, and timestamps.
 
 ## Usage
 
@@ -44,9 +44,37 @@ Project/folder usage groups sessions by their exact recorded working directory (
 
 Display settings can show or hide cached tokens, cached %, estimated API cost, reasoning level, cache miss, reasoning tokens, model, and cwd/title columns, and set the session table model column width to `auto` or a fixed 8-40 character width. Appearance settings can change the flag palette with a paged flag picker, color mode, lightness, accent line, and themed usage bars. Estimated cost uses standard OpenAI per-1M-token rates for known models, with any custom rates from setup overriding the built-in table. Unknown models show `n/a`; mixed aggregates with some unknown model rates are marked with `*`.
 
+GPT-6 Astra uses $10 input, $1 cached input, and $50 output per million
+tokens. GPT-5.6 Sol (including `gpt-5.6`), Terra, and Luna rates were updated
+alongside Astra on 2026-09-16 from the
+[official model pricing](https://developers.openai.com/api/docs/models/compare).
+Estimates use standard short-context rates; they do not include cache-write
+surcharges, long-context premiums, or service-tier adjustments.
+
+Token totals come from the final cumulative usage record in each session.
+Input includes cached input, and output includes reasoning tokens; those
+subsets are not added again. Totals include context processed across requests,
+so they can exceed a single request's context size or its uncached usage.
+Pricing discounts affect dollars, not the recorded token count. Use the cache
+miss and cached columns to compare uncached input with total input.
+
+Codex `/usage daily`, `/usage weekly`, and `/usage cumulative` show
+[account activity from the service](https://learn.chatgpt.com/docs/developer-commands?surface=cli).
+This app shows usage from the local session files, which can span different
+accounts, models, and dates. It does not measure your Plus allowance. Compare
+the same dates and check both `input` (including cache) and `cache_miss`
+(uncached input). For example, 4B input with 3.15B cached is 850M uncached;
+that alone does not prove which number the account activity view reports.
+Official account-usage documentation does not specify its cache treatment.
+
+Records without usable event timestamps fall back to the session's last
+activity time. The same fallback preserves the final total if cumulative
+counter corrections make the event timeline inconsistent. Repeated snapshots
+and rate-limit-only updates do not add requests or reset token counters.
+
 The overview shows projected usage for the next 5 hours, next day, next week, and next 30-day month. The `Statistic` tab next to Overview shows RPS, RPM, RPH, TPS, TPM, TPH, and TPR (tokens per request) for complete rounded windows: last hour, last 5 hours, last day, last ISO week, and last calendar month. Press `m` on Statistic to switch between the table and a line-chart mode showing TPS over the last minute and TPM over the last hour. The prediction algorithm is configurable from the Misc settings tab: `recent_rate` projects from the current active usage rate, while `previous_period` assumes the next period will match the previous period's usage. The Misc tab can also set an automatic TUI refresh interval in seconds and customize the shutdown closing-frame interval; `0` or `off` disables auto refresh.
 
-Forecast warnings are disabled until a positive token limit is configured. The 5-hour forecast uses sessions active in the rolling last 5 hours and projects that recent rate across a 5-hour horizon. The weekly forecast uses the current ISO week-to-date rate and projects it through the end of the week. Table and graph reports append compact forecast and prediction sections, JSON reports include a top-level `forecast` object, and weekly CSV rows include forecast columns when limits are enabled.
+Forecast warnings are disabled until a positive token limit is configured. The 5-hour forecast uses usage events in the rolling last 5 hours and projects that recent rate across a 5-hour horizon. The weekly forecast uses the current ISO week-to-date rate and projects it through the end of the week. These are user-configured local token warnings, not Plus quota predictions. Table and graph reports append compact forecast and prediction sections, JSON reports include a top-level `forecast` object, and weekly CSV rows include forecast columns when limits are enabled.
 
 Example config snippet:
 

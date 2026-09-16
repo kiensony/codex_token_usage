@@ -14,7 +14,9 @@ reports.
 5. Theme, display, pricing, keybinding, limit, prediction, refresh, and shutdown
    settings are loaded through `theme/`.
 
-Only the last cumulative token-count event in a session is counted.
+All-time session totals use the final valid cumulative token-count event.
+Time groups, date filters, and forecasts use timestamped deltas in UTC, with
+last-activity fallback for undated or inconsistent usage timelines.
 
 ## Top-Level Modules
 
@@ -23,6 +25,8 @@ Only the last cumulative token-count event in a session is counted.
   assembly.
 - `models.py`: immutable data models for token breakdowns, sessions, metadata,
   and datasets.
+- `usage_windows.py`: shared event sums, UTC date/window slicing, and legacy
+  timing fallback. The TUI keeps full history and slices only visible usage.
 - `pricing.py`: built-in model rates, custom pricing support, and cost
   estimates.
 - `forecast.py`: token limits, rolling 5-hour and weekly forecasts, usage

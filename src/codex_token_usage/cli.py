@@ -61,12 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--since",
         type=parse_date,
-        help="Include sessions on or after this date (YYYY-MM-DD).",
+        help="Include usage on or after this UTC date (YYYY-MM-DD).",
     )
     parser.add_argument(
         "--until",
         type=parse_date,
-        help="Include sessions on or before this date (YYYY-MM-DD).",
+        help="Include usage on or before this UTC date (YYYY-MM-DD).",
     )
     parser.add_argument(
         "--group-by",

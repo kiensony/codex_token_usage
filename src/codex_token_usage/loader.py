@@ -15,6 +15,7 @@ from .models import (
     UsageDataset,
     UsageEvent,
 )
+from .usage_windows import slice_session_dates
 
 
 TOKEN_COUNT_KEYS = ("token_count", "token_counts", "tokens")
@@ -73,7 +74,8 @@ def load_usage(
         for path in sorted(sessions_dir.glob("**/*.jsonl")):
             session = parse_session_jsonl(path)
             session = apply_sqlite_metadata(session, sqlite_metadata)
-            if should_include_session(session, since, until, include_zero):
+            session = slice_session_dates(session, since, until)
+            if session is not None and should_include_session(session, None, None, include_zero):
                 sessions.append(session)
 
     return UsageDataset(
@@ -91,14 +93,8 @@ def should_include_session(
     until: date | None,
     include_zero: bool,
 ) -> bool:
-    if not include_zero and session.tokens.total_tokens <= 0:
-        return False
-    session_day = session.activity_day
-    if since and (session_day is None or session_day < since):
-        return False
-    if until and (session_day is None or session_day > until):
-        return False
-    return True
+    selected = slice_session_dates(session, since, until)
+    return selected is not None and (include_zero or selected.tokens.total_tokens > 0)
 
 
 def parse_session_jsonl(path: Path) -> SessionUsage:
@@ -131,14 +127,16 @@ def parse_session_jsonl(path: Path) -> SessionUsage:
                 token_payload = extract_token_payload(event)
                 if token_payload is not None:
                     has_token_event = True
-                    request_count += 1
                     parsed_tokens = parse_token_breakdown(token_payload)
                     final_tokens = parsed_tokens.normalized()
-                    if event_time is not None:
+                    delta = token_delta(final_tokens, previous_tokens)
+                    if delta != TokenBreakdown.empty():
+                        request_count += 1
+                    if event_time is not None and delta != TokenBreakdown.empty():
                         usage_events.append(
                             UsageEvent(
                                 occurred_at=event_time,
-                                tokens=token_delta(final_tokens, previous_tokens),
+                                tokens=delta,
                             )
                         )
                     previous_tokens = final_tokens
@@ -242,21 +240,32 @@ def is_token_event(data: dict[str, Any]) -> bool:
     return any(key in data for key in TOKEN_COUNT_KEYS)
 
 
-def token_container(data: dict[str, Any]) -> dict[str, Any]:
+def token_container(data: dict[str, Any]) -> dict[str, Any] | None:
+    # Rate-limit refreshes can be token_count events with info=null. They do
+    # not represent zero cumulative usage or a new request.
+    if "info" in data and not isinstance(data["info"], dict):
+        return None
     info = data.get("info")
     if isinstance(info, dict):
         total_usage = info.get("total_token_usage")
-        if isinstance(total_usage, dict):
+        if isinstance(total_usage, dict) and has_token_fields(total_usage):
             return total_usage
         token_count = info.get("token_count")
-        if isinstance(token_count, dict):
+        if isinstance(token_count, dict) and has_token_fields(token_count):
             return token_count
-        return info
+        return info if has_token_fields(info) else None
     for key in TOKEN_COUNT_KEYS:
         value = data.get(key)
-        if isinstance(value, dict):
+        if isinstance(value, dict) and has_token_fields(value):
             return value
-    return data
+    return data if has_token_fields(data) else None
+
+
+def has_token_fields(data: dict[str, Any]) -> bool:
+    return any(key in data for key in (
+        "input_tokens", "input", "prompt_tokens", "output_tokens", "output",
+        "completion_tokens", "total_tokens", "total", "tokens_used",
+    ))
 
 
 def parse_token_breakdown(data: dict[str, Any]) -> TokenBreakdown:

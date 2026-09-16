@@ -234,10 +234,10 @@ class ViewRendererMixin(ViewOverlayMixin):
         rows = [
             ("Sessions", str(len(self.state.visible_sessions()))),
             ("Total tokens", format_int(totals.total_tokens)),
-            ("Input tokens", format_int(totals.input_tokens)),
+            ("Input incl. cache", format_int(totals.input_tokens)),
             ("Output tokens", format_int(totals.output_tokens)),
             ("Cached input", format_int(totals.cached_input_tokens)),
-            ("Cache miss input", format_int(totals.cache_miss_input_tokens)),
+            ("Uncached input", format_int(totals.cache_miss_input_tokens)),
             ("Reasoning output", format_int(totals.reasoning_output_tokens)),
             ("Codex home", str(self.state.dataset.codex_home)),
             ("Loaded", self.state.dataset.loaded_at.isoformat()),
@@ -845,10 +845,10 @@ class ViewRendererMixin(ViewOverlayMixin):
             ("Updated", session.updated_at.isoformat() if session.updated_at else ""),
             ("Path", str(session.path)),
             ("Total", format_int(session.tokens.total_tokens)),
-            ("Input", format_int(session.tokens.input_tokens)),
+            ("Input incl. cache", format_int(session.tokens.input_tokens)),
             ("Output", format_int(session.tokens.output_tokens)),
             ("Cached input", format_int(session.tokens.cached_input_tokens)),
-            ("Cache miss input", format_int(session.tokens.cache_miss_input_tokens)),
+            ("Uncached input", format_int(session.tokens.cache_miss_input_tokens)),
             ("Reasoning output", format_int(session.tokens.reasoning_output_tokens)),
             ("Corrupt lines skipped", str(session.corrupt_lines)),
         ]
@@ -878,10 +878,10 @@ class ViewRendererMixin(ViewOverlayMixin):
             ("Sessions", format_int(project.project.sessions)),
             ("Models", format_int(len(project.models))),
             ("Total", format_int(tokens.total_tokens)),
-            ("Input", format_int(tokens.input_tokens)),
+            ("Input incl. cache", format_int(tokens.input_tokens)),
             ("Output", format_int(tokens.output_tokens)),
             ("Cached input", format_int(tokens.cached_input_tokens)),
-            ("Cache miss input", format_int(tokens.cache_miss_input_tokens)),
+            ("Uncached input", format_int(tokens.cache_miss_input_tokens)),
             ("Reasoning output", format_int(tokens.reasoning_output_tokens)),
         ]
         if self.options.display.show_cached_percent:
