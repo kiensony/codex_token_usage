@@ -27,8 +27,8 @@ last-activity fallback for undated or inconsistent usage timelines.
   and datasets.
 - `usage_windows.py`: shared event sums, UTC date/window slicing, and legacy
   timing fallback. The TUI keeps full history and slices only visible usage.
-- `pricing.py`: built-in model rates, custom pricing support, and cost
-  estimates.
+- `model_catalog.py` holds the built-in token rates and other published billing units.
+- `pricing.py` applies custom rates and estimates session and aggregate costs.
 - `forecast.py`: token limits, rolling 5-hour and weekly forecasts, usage
   predictions, and forecast serialization.
 - `keybindings.py`: default TUI keybindings, config parsing, key normalization,

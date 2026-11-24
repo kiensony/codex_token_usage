@@ -360,7 +360,10 @@ class ViewRendererMixin(ViewOverlayMixin):
         rows = self.state.model_rows()
         max_label = max((len(row.key) for row in rows), default=len("model"))
         label_width = min(max(16, max_label), max(16, width // 3))
-        self.render_usage_rows("model", rows, height, width, label_width=label_width)
+        self.render_usage_rows(
+            "model", rows, height, width,
+            label_width=label_width, selected_index=self.state.model_index(rows),
+        )
     def render_projects(self, height: int, width: int) -> None:
         rows = self.state.project_model_rows()
         token_rows: list = []
@@ -715,6 +718,7 @@ class ViewRendererMixin(ViewOverlayMixin):
         width: int,
         forecast_window: ForecastWindow | None = None,
         label_width: int = 16,
+        selected_index: int | None = None,
     ) -> None:
         rows = tuple(rows)
         token_widths = self._aggregate_token_widths(rows)
@@ -726,9 +730,11 @@ class ViewRendererMixin(ViewOverlayMixin):
         if forecast_window and forecast_window.enabled and label == "week":
             header += " forecast"
         self.render_themed_text(4, 0, header[: max(0, width - 1)], curses.A_BOLD)
-        for offset, row in enumerate(rows[: max(0, height - 7)], start=5):
+        page_size = max(0, height - 7)
+        start = visible_start(selected_index or 0, page_size, len(rows))
+        for offset, row in enumerate(rows[start : start + page_size]):
             self.render_usage_row(
-                offset,
+                5 + offset,
                 label,
                 row,
                 max_total,
@@ -737,6 +743,7 @@ class ViewRendererMixin(ViewOverlayMixin):
                 forecast_window,
                 token_widths=token_widths,
                 bar_width=14,
+                attr=curses.A_REVERSE if start + offset == selected_index else 0,
             )
 
     def render_usage_row(

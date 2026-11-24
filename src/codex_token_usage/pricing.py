@@ -3,14 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from .models import SessionUsage, TokenBreakdown
-
-
-@dataclass(frozen=True)
-class ModelPrice:
-    input_per_million: float
-    cached_input_per_million: float | None
-    output_per_million: float
+from .model_catalog import MODEL_PRICES, REFERENCE_PRICING, ModelPrice
+from .models import SessionUsage, TokenBreakdown, UsageDataset
 
 
 @dataclass(frozen=True)
@@ -25,34 +19,18 @@ class PricingConfig:
     model_prices: tuple[tuple[str, ModelPrice], ...] = ()
 
 
-# USD per 1M tokens, standard processing, short-context rates where applicable.
-# GPT-5.6 and GPT-6 Astra rates verified 2026-09-16 against:
-# https://developers.openai.com/api/docs/models/gpt-6-astra
-# https://developers.openai.com/api/docs/models/gpt-5.6-{sol,terra,luna}
-MODEL_PRICES: dict[str, ModelPrice] = {
-    "chat-latest": ModelPrice(5.00, 0.50, 30.00),
-    "gpt-5.3-codex": ModelPrice(1.75, 0.175, 14.00),
-    "gpt-5.4": ModelPrice(2.50, 0.25, 15.00),
-    "gpt-5.4-mini": ModelPrice(0.75, 0.075, 4.50),
-    "gpt-5.4-nano": ModelPrice(0.20, 0.02, 1.25),
-    "gpt-5.4-pro": ModelPrice(30.00, None, 180.00),
-    "gpt-5.5": ModelPrice(5.00, 0.50, 30.00),
-    "gpt-5.6": ModelPrice(4.00, 0.40, 20.00),
-    "gpt-5.6-luna": ModelPrice(0.20, 0.02, 1.20),
-    "gpt-5.6-sol": ModelPrice(4.00, 0.40, 20.00),
-    "gpt-5.6-terra": ModelPrice(2.00, 0.20, 12.00),
-    "gpt-6-astra": ModelPrice(10.00, 1.00, 50.00),
-    "gpt-5.5-pro": ModelPrice(30.00, None, 180.00),
-}
-
-
 def model_price(
     model: str | None,
     pricing: PricingConfig | None = None,
 ) -> ModelPrice | None:
     if not model:
         return None
-    return model_prices(pricing).get(normalize_model_name(model))
+    name = normalize_model_name(model)
+    if pricing and pricing.model_prices:
+        override = dict(pricing.model_prices).get(name)
+        if override is not None:
+            return override
+    return MODEL_PRICES.get(name)
 
 
 def model_prices(pricing: PricingConfig | None = None) -> dict[str, ModelPrice]:
@@ -68,6 +46,18 @@ def normalize_model_name(model: str) -> str:
         if normalized.startswith(prefix):
             normalized = normalized[len(prefix) :]
     return normalized
+
+
+def available_model_names(
+    dataset: UsageDataset,
+    custom_prices: dict[str, ModelPrice],
+) -> list[str]:
+    names = MODEL_PRICES.keys() | REFERENCE_PRICING.keys() | custom_prices.keys()
+    for session in dataset.sessions:
+        model = normalize_model_name(session.model)
+        if model and model != "(unknown)":
+            names.add(model)
+    return sorted(names)
 
 
 def estimate_tokens_cost(tokens: TokenBreakdown, price: ModelPrice) -> float:

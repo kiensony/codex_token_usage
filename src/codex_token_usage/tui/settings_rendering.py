@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import curses
+from textwrap import wrap
 
 from ..forecast import PredictionConfig
 from ..keybindings import KEYBINDING_ACTIONS, KeybindingConfig, format_keybinding_config
+from ..model_catalog import REFERENCE_PRICING
 from ..pricing import ModelPrice
 from ..theme import DisplayConfig, ThemeConfig, theme_palette
 from .formatting import on_off, settings_columns, truncate, visible_start
@@ -318,14 +320,15 @@ class SettingsRenderingMixin:
     ) -> None:
         model_width, input_x, cached_x, output_x, source_x = settings_columns(width)
         self.safe_addstr(top, 0, "Model Pricing", self.accent_attr)
-        self.safe_addstr(
-            top + 1,
-            0,
-            "Model rates are USD per 1M tokens. Custom rates override built-ins.",
-            curses.A_DIM,
-        )
+        model = model_names[model_index] if model_names else ""
+        note = "Model rates are USD per 1M tokens. Custom rates override built-ins."
+        if model in REFERENCE_PRICING and model not in custom_prices:
+            note = REFERENCE_PRICING[model]
+        lines = wrap(note, width=max(1, width - 1))[: max(1, height - top - 6)]
+        for offset, line in enumerate(lines, 1):
+            self.safe_addstr(top + offset, 0, line, curses.A_DIM)
 
-        header_y = top + 3
+        header_y = top + len(lines) + 2
         self.safe_addstr(header_y, 0, "  " + f"{'model':<{model_width}}", curses.A_BOLD)
         self.safe_addstr(header_y, input_x, f"{'input':>10}", curses.A_BOLD)
         self.safe_addstr(header_y, cached_x, f"{'cached':>10}", curses.A_BOLD)

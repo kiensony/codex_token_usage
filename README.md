@@ -27,7 +27,7 @@ Options:
 - `--format table|json|csv|graph`
 - `--group-by date|week|month|hour|session|model|project|folder|cwd` (`day` is also accepted as an alias for `date`; `folder` is an alias for `project`)
 - `--top N`
-- `--include-zero`
+- `--include-zero` includes zero-token sessions. With `--group-by model` it also lists models with no sessions.
 - `--five-hour-token-limit TOKENS`: one-run rolling 5-hour warning limit; `0` disables
 - `--weekly-token-limit TOKENS`: one-run weekly warning limit; `0` disables
 - `--theme PRESET`: one-run Pride theme override, or `plain` to disable
@@ -44,12 +44,34 @@ Project/folder usage groups sessions by their exact recorded working directory (
 
 Display settings can show or hide cached tokens, cached %, estimated API cost, reasoning level, cache miss, reasoning tokens, model, and cwd/title columns, and set the session table model column width to `auto` or a fixed 8-40 character width. Appearance settings can change the flag palette with a paged flag picker, color mode, lightness, accent line, and themed usage bars. Estimated cost uses standard OpenAI per-1M-token rates for known models, with any custom rates from setup overriding the built-in table. Unknown models show `n/a`; mixed aggregates with some unknown model rates are marked with `*`.
 
-GPT-6 Astra uses $10 input, $1 cached input, and $50 output per million
-tokens. GPT-5.6 Sol (including `gpt-5.6`), Terra, and Luna rates were updated
-alongside Astra on 2026-09-16 from the
-[official model pricing](https://developers.openai.com/api/docs/models/compare).
-Estimates use standard short-context rates; they do not include cache-write
-surcharges, long-context premiums, or service-tier adjustments.
+**By Model** lists the full catalog, custom models, and models found in local
+sessions. Unused models show zero sessions and tokens for the selected dates.
+Press `/`, type `luna`, and press `Enter` to find both Luna models. Use
+`PageDown` and `PageUp` to browse the list.
+
+Press `c` and open **Model Pricing** to browse the OpenAI model catalog,
+including retired models used in older sessions. The built-in rates were
+checked on 2026-11-25. [OpenAI model catalog](https://developers.openai.com/api/docs/models/all)
+
+Standard GPT-6 rates in USD per million tokens, for short-context requests.
+[OpenAI API pricing](https://developers.openai.com/api/docs/pricing)
+
+| Model | Uncached input | Cached input | Output |
+| --- | ---: | ---: | ---: |
+| GPT-6.2 Astra | $8.00 | $0.40 | $40.00 |
+| GPT-6.2 Sol | $2.00 | $0.10 | $10.00 |
+| GPT-6.1 Sol | $2.00 | $0.10 | $10.00 |
+| GPT-6.1 Terra | $1.00 | $0.05 | $5.00 |
+| GPT-6 Astra | $10.00 | $1.00 | $50.00 |
+| GPT-6 Sol | $2.00 | $0.20 | $10.00 |
+| GPT-6 Luna | $0.10 | $0.01 | $0.50 |
+
+Session estimates cover model tokens. Base model names use standard short-context
+rates. A session recorded with a listed `(long context)` or `-ultrafast`
+label uses the corresponding rate. Tool fees and cache-write charges are excluded. Select a
+`reference` row to see pricing by billing unit or provider. Sessions show
+`n/a` when estimating a cost requires minutes, characters, or separate
+audio, image, and text token counts.
 
 Token totals come from the final cumulative usage record in each session.
 Input includes cached input, and output includes reasoning tokens; those
@@ -101,7 +123,7 @@ Default TUI keys:
 - `Tab` / `Shift+Tab`: switch views
 - Arrow keys or `j`/`k`: move selection
 - `PageUp` / `PageDown`: move selection by page
-- `Home` / `End`: jump to the first or last session
+- `Home` / `End`: jump to the first or last row in By Model, By Project, or By Session
 - `Enter`: open selected session details
 - `s`: cycle sort field for the active rows
 - `S`: reverse sort direction

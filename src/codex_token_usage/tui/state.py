@@ -8,7 +8,12 @@ from typing import Callable
 from ..forecast import LimitConfig, PredictionConfig
 from ..keybindings import KeybindingConfig
 from ..models import SessionUsage, TokenBreakdown, UsageDataset
-from ..pricing import PricingConfig, estimate_session_cost
+from ..pricing import (
+    PricingConfig,
+    available_model_names,
+    estimate_session_cost,
+    normalize_model_name,
+)
 from ..report import ReportRow, filter_sessions, make_report_rows
 from ..usage_windows import slice_session_dates
 from ..theme import DEFAULT_SHUTDOWN_SECONDS, DisplayConfig, ThemeConfig
@@ -120,6 +125,7 @@ class TuiState:
     pricing: PricingConfig = PricingConfig()
     statistic_display_mode: str = "table"
     project_display_mode: str = "projects"
+    selected_model: str | None = None
 
     @property
 
@@ -152,6 +158,12 @@ class TuiState:
         return self.view
 
     def move_selection(self, delta: int) -> "TuiState":
+        if self.view == "models":
+            rows = self.model_rows()
+            if not rows:
+                return self
+            index = min(max(self.model_index(rows) + delta, 0), len(rows) - 1)
+            return replace(self, selected_model=rows[index].key)
         if self.tab_view == "projects":
             projects = self.project_model_rows()
             if not projects:
@@ -171,11 +183,16 @@ class TuiState:
         return self.move_selection(delta * max(1, page_size))
 
     def select_first(self) -> "TuiState":
+        if self.view == "models":
+            return replace(self, selected_model=None)
         if self.tab_view == "projects":
             return replace(self, selected_project_index=0)
         return replace(self, selected_index=0)
 
     def select_last(self) -> "TuiState":
+        if self.view == "models":
+            rows = self.model_rows()
+            return replace(self, selected_model=rows[-1].key if rows else None)
         if self.tab_view == "projects":
             projects = self.project_model_rows()
             if not projects:
@@ -187,6 +204,21 @@ class TuiState:
         return replace(self, selected_index=len(sessions) - 1)
 
     def open_details(self) -> "TuiState":
+        if self.view == "models":
+            rows = self.model_rows()
+            if not rows:
+                return self
+            model = rows[self.model_index(rows)].key
+            for index, session in enumerate(self.visible_sessions()):
+                if normalize_model_name(session.model) == model:
+                    return replace(
+                        self,
+                        selected_index=index,
+                        selected_model=model,
+                        previous_view_index=self.view_index,
+                        view_index=VIEWS.index("details"),
+                    )
+            return replace(self, status=f"No sessions for {model} in this view")
         if self.tab_view == "projects":
             if self.selected_project() is None:
                 return self
@@ -436,10 +468,18 @@ class TuiState:
             make_report_rows(dataset, group_by="hour", pricing=self.pricing)
         )
 
-    def model_rows(self):
+    def model_index(self, rows: list[ReportRow]) -> int:
+        return next((i for i, row in enumerate(rows) if row.key == self.selected_model), 0)
+
+    def model_rows(self) -> list[ReportRow]:
         dataset = replace(self.dataset, sessions=tuple(self.visible_sessions()))
+        names = available_model_names(self.dataset, dict(self.pricing.model_prices))
+        needle = self.filter_text.casefold()
         return self.sorted_report_rows(
-            make_report_rows(dataset, group_by="model", pricing=self.pricing)
+            make_report_rows(
+                dataset, group_by="model", pricing=self.pricing,
+                catalog_models=(name for name in names if needle in name.casefold()),
+            )
         )
 
     def project_rows(self):

@@ -5,7 +5,7 @@ from datetime import date
 from typing import Iterable
 
 from ..models import SessionUsage, TokenBreakdown, UsageDataset
-from ..pricing import CostEstimate, PricingConfig, estimate_session_cost
+from ..pricing import CostEstimate, PricingConfig, estimate_session_cost, normalize_model_name
 from ..usage_windows import session_events, slice_session_dates, utc_datetime
 from .formatting import canonical_group_by, format_datetime, limit_rows
 from .models import TIME_GROUPS, ReportRow
@@ -30,6 +30,8 @@ def make_report_rows(
     group_by: str,
     top: int | None = None,
     pricing: PricingConfig | None = None,
+    *,
+    catalog_models: Iterable[str] | None = None,
 ) -> list[ReportRow]:
     group_by = canonical_group_by(group_by)
     sessions = list(dataset.sessions)
@@ -56,6 +58,8 @@ def make_report_rows(
     )
     for session in contributions:
         key = group_key(session, group_by)
+        if group_by == "model" and catalog_models is not None:
+            key = normalize_model_name(key)
         count, tokens, cost, priced_sessions, unpriced_sessions = grouped.get(
             key,
             (0, TokenBreakdown.empty(), 0.0, 0, 0),
@@ -90,6 +94,13 @@ def make_report_rows(
             unpriced_sessions,
         ) in grouped.items()
     ]
+    if group_by == "model" and catalog_models is not None:
+        rows.extend(
+            ReportRow(
+                key=name, sessions=0, tokens=TokenBreakdown.empty(), estimated_cost=CostEstimate(0.0)
+            )
+            for name in sorted(set(catalog_models).difference(grouped))
+        )
     if group_by in TIME_GROUPS:
         rows.sort(key=lambda row: row.key)
     else:

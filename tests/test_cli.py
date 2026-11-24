@@ -2,12 +2,26 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
+import tempfile
 import unittest
 
-from codex_token_usage.cli import build_parser
+from codex_token_usage.cli import build_parser, main
 
 
 class CliParserTests(unittest.TestCase):
+    def test_model_report_can_include_models_without_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            args = ["--codex-home", root, "--format", "json", "--group-by", "model"]
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(main(args), 0)
+            self.assertEqual(json.loads(output.getvalue())["rows"], [])
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(main([*args, "--include-zero"]), 0)
+            rows = json.loads(output.getvalue())["rows"]
+            self.assertIn("gpt-6-luna", [row["key"] for row in rows])
+            self.assertTrue(all(row["sessions"] == 0 for row in rows))
+
     def test_setup_aliases_parse(self) -> None:
         for flag in ("-c", "--config", "--setup"):
             with self.subTest(flag=flag):

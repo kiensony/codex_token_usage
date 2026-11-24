@@ -112,6 +112,13 @@ class PricingTests(unittest.TestCase):
 
     def test_current_model_costs_with_cache_and_reasoning(self) -> None:
         for model, expected in (
+            ("gpt-6.2-astra", 1.10),
+            ("gpt-6.2-sol", 0.275),
+            ("gpt-6.1-sol", 0.275),
+            ("gpt-6.1-sol-ultrafast", 1.65),
+            ("gpt-6.1-terra", 0.1375),
+            ("gpt-6-sol", 0.28),
+            ("gpt-6-luna", 0.014),
             ("gpt-6-astra", 1.4),
             (" OpenAI/gpt-6-astra ", 1.4),
             ("models/gpt-6-astra", 1.4),
@@ -119,6 +126,12 @@ class PricingTests(unittest.TestCase):
             ("gpt-5.6-sol", 0.56),
             ("gpt-5.6-terra", 0.314),
             ("gpt-5.6-luna", 0.0314),
+            ("gpt-5.5 (long context)", 1.315),
+            ("gpt-5.5-pro (long context)", 10.59),
+            ("gpt-5.4 (long context)", 0.6575),
+            ("gpt-5.4-pro (long context)", 10.59),
+            ("gpt-4.1 (long context)", 0.261),
+            ("gpt-4.1-mini (long context)", 0.0522),
         ):
             with self.subTest(model=model):
                 tokens = TokenBreakdown(
@@ -131,6 +144,20 @@ class PricingTests(unittest.TestCase):
                 estimate = estimate_session_cost(usage)
                 self.assertAlmostEqual(estimate.usd, expected)
                 self.assertEqual(usage.tokens.total_tokens, 117_000)
+
+    def test_catalog_models_with_different_billing_units(self) -> None:
+        million_inputs = TokenBreakdown(input_tokens=1_000_000)
+        for model, tokens, expected in (
+            ("gpt-5.1-codex-mini", million_inputs, 0.25),
+            ("text-embedding-3-small", million_inputs, 0.02),
+            ("omni-moderation-latest", million_inputs, 0.0),
+            ("gpt-4o-mini-tts", TokenBreakdown(output_tokens=1_000_000), 12.0),
+            ("gpt-image-2.6-flare", million_inputs, None),
+            ("whisper-1", million_inputs, None),
+        ):
+            with self.subTest(model=model):
+                estimate = estimate_session_cost(session("test", model, tokens))
+                self.assertEqual(estimate.usd, expected)
 
     def test_astra_custom_rates_override_builtin_rates(self) -> None:
         estimate = estimate_session_cost(

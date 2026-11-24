@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from .loader import load_usage, parse_date
+from .pricing import available_model_names
 from .report import render_report
 from .theme import (
     PLAIN_THEME_NAMES,
@@ -96,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--include-zero",
         action="store_true",
-        help="Include sessions with no token_count event or zero tokens.",
+        help="Include zero-token sessions and, in model reports, models with no sessions.",
     )
     parser.add_argument(
         "--five-hour-token-limit",
@@ -162,6 +163,9 @@ def main(argv: list[str] | None = None) -> int:
             until=args.until,
             include_zero=args.include_zero,
         )
+        catalog_models = None
+        if args.include_zero and args.group_by == "model":
+            catalog_models = available_model_names(dataset, dict(theme_result.pricing.model_prices))
         sys.stdout.write(
             render_report(
                 dataset,
@@ -175,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 limits=limits,
                 prediction=theme_result.prediction,
+                catalog_models=catalog_models,
             )
         )
         return 0

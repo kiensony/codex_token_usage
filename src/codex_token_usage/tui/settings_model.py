@@ -6,8 +6,8 @@ from textwrap import wrap
 from .. import __version__
 from ..forecast import PREDICTION_ALGORITHMS, LimitConfig, PredictionConfig
 from ..keybindings import KEYBINDING_ACTION_LABELS, KeybindingConfig
-from ..models import UsageDataset
-from ..pricing import MODEL_PRICES, ModelPrice, normalize_model_name
+from ..model_catalog import REFERENCE_PRICING
+from ..pricing import MODEL_PRICES, ModelPrice, available_model_names as settings_model_names
 from ..theme import (
     COLOR_MODES,
     DEFAULT_SHUTDOWN_SECONDS,
@@ -103,19 +103,6 @@ def default_setup_values() -> tuple[
     )
 
 
-def settings_model_names(
-    dataset: UsageDataset,
-    custom_prices: dict[str, ModelPrice],
-) -> list[str]:
-    names = set(MODEL_PRICES)
-    names.update(custom_prices)
-    for session in dataset.sessions:
-        model = normalize_model_name(session.model)
-        if model and model != "(unknown)":
-            names.add(model)
-    return sorted(names)
-
-
 def effective_settings_price(
     model: str,
     custom_prices: dict[str, ModelPrice],
@@ -128,6 +115,8 @@ def settings_price_source(model: str, custom_prices: dict[str, ModelPrice]) -> s
         return "custom"
     if model in MODEL_PRICES:
         return "built-in"
+    if model in REFERENCE_PRICING:
+        return "reference"
     return "unpriced"
 
 

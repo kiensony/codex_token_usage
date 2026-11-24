@@ -22,6 +22,12 @@ from codex_token_usage.theme import ThemeConfig
 
 
 class ReportTests(unittest.TestCase):
+    def test_model_graph_shows_no_bar_for_an_unused_model(self) -> None:
+        graph = render_report(sample_dataset(), "graph", "model", catalog_models=["gpt-6-luna"])
+        luna = next(line for line in graph.splitlines() if line.startswith("gpt-6-luna"))
+        self.assertIn("total 0", luna)
+        self.assertNotIn("#", luna)
+
     def test_unreliable_or_partial_timeline_preserves_final_total(self) -> None:
         base = session("partial", 300, "2026-09-16T12:00:00+00:00", Path("/tmp"))
         for event_total in (100, 400):

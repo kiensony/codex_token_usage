@@ -17,7 +17,7 @@ from codex_token_usage.models import (
     UsageDataset,
     UsageEvent,
 )
-from codex_token_usage.pricing import ModelPrice
+from codex_token_usage.pricing import ModelPrice, PricingConfig
 from codex_token_usage.report import filter_sessions
 from codex_token_usage.theme import (
     DisplayConfig,
@@ -179,7 +179,7 @@ class TuiStateTests(unittest.TestCase):
 
         state = state.next_view()
         self.assertEqual(state.view, "models")
-        self.assertEqual([row.key for row in state.model_rows()], ["gpt-5"])
+        self.assertEqual(state.model_rows()[0].key, "gpt-5")
         self.assertEqual(state.model_rows()[0].tokens.total_tokens, 30)
 
         state = state.next_view()
@@ -961,6 +961,16 @@ class TuiStateTests(unittest.TestCase):
         self.assertEqual(keybindings.labels("next_view"), ("Tab",))
         self.assertEqual(status, "Ctrl+S is reserved")
 
+    def test_model_pricing_displays_rate_per_minute(self) -> None:
+        stdscr = FakeStdScr([])
+        ui = CursesUi(stdscr, TuiState(dataset=dataset()), TuiOptions(codex_home=Path("/tmp")))
+        names = settings_model_names(ui.state.dataset, {})
+        ui.render_model_pricing_settings(3, 24, 80, {}, names, names.index("whisper-1"), 0)
+        self.assertTrue(any("$0.006 per minute" in text for _, _, text, _ in stdscr.writes))
+        self.assertEqual(settings_price_source("whisper-1", {}), "reference")
+        custom = {"whisper-1": ModelPrice(1, 0, 2)}
+        self.assertEqual(settings_price_source("whisper-1", custom), "custom")
+
     def test_settings_helpers(self) -> None:
         custom = {"custom-model": ModelPrice(1.0, 0.1, 2.0)}
         names = settings_model_names(dataset(), custom)
@@ -1533,6 +1543,52 @@ class TuiStateTests(unittest.TestCase):
             any(text.startswith("o4-mini") for text in labels_by_y.values())
         )
         self.assertTrue(any("model" in text and "usage" in text for text in rendered))
+
+    def test_model_view_browses_and_filters_the_catalog_without_sessions(self) -> None:
+        empty = replace(dataset(), sessions=())
+        pricing = PricingConfig((("custom-gpt", ModelPrice(1, 0, 2)),))
+        state = TuiState(dataset=empty, pricing=pricing)
+        while state.view != "models":
+            state = state.next_view()
+        names = settings_model_names(empty, dict(pricing.model_prices))
+        self.assertIn("webrun", names)
+        rows = state.model_rows()
+        self.assertEqual([row.key for row in rows], names)
+        self.assertTrue(all(row.sessions == 0 and row.tokens.total_tokens == 0 for row in rows))
+        self.assertTrue(all(row.estimated_cost.usd == 0 for row in rows))
+
+        screen = FakeStdScr([*map(ord, "LuNa"), 10], size=(14, 100))
+        ui = CursesUi(screen, state, TuiOptions(codex_home=empty.codex_home))
+        ui.handle_key(curses.KEY_END)
+        ui.render()
+        self.assertTrue(any(text.strip() == names[-1] for _, _, text, _ in screen.writes))
+        ui.handle_key(ord("/"))
+        ui.render()
+        self.assertEqual([row.key for row in ui.state.model_rows()], ["gpt-5.6-luna", "gpt-6-luna"])
+        ui.handle_key(curses.KEY_DOWN)
+        ui.render()
+        self.assertTrue(any(text.strip() == "gpt-6-luna" and attr & curses.A_REVERSE
+                            for _, _, text, attr in screen.writes))
+        ui.handle_key(10)
+        self.assertEqual(ui.state.view, "models")
+
+    def test_model_view_merges_prefixed_usage_and_opens_matching_session(self) -> None:
+        source = dataset()
+        first, second = source.sessions
+        first = replace(first, metadata=replace(first.metadata, model="OpenAI/gpt-6-luna"))
+        second = replace(second, metadata=replace(second.metadata, model="gpt-6-luna"))
+        other = session("other", 100, 80, "/repo", "2026-06-01T00:00:00+00:00", source.codex_home)
+        state = TuiState(dataset=replace(source, sessions=(first, second, other)))
+        while state.view != "models":
+            state = state.next_view()
+        rows = state.set_filter("luna").model_rows()
+        self.assertEqual([(row.key, row.sessions) for row in rows],
+                         [("gpt-6-luna", 2), ("gpt-5.6-luna", 0)])
+        self.assertEqual(rows[0].tokens.total_tokens, 30)
+        details = state.move_selection(1).open_details()
+        self.assertEqual(details.view, "details")
+        self.assertEqual(details.selected_session().session_id, second.session_id)
+        self.assertEqual(state.set_filter("gpt-6-astra").open_details().view, "models")
 
     def test_project_view_can_render_indented_model_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

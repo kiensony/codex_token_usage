@@ -4,6 +4,7 @@ import csv
 import io
 import json
 from datetime import datetime
+from typing import Iterable
 
 from ..forecast import (
     LimitConfig,
@@ -13,7 +14,7 @@ from ..forecast import (
     make_usage_forecast,
 )
 from ..models import UsageDataset
-from ..theme import ThemeConfig, themed_ansi_bar
+from ..theme import ThemeConfig, plain_bar, themed_ansi_bar
 from .forecast_display import (
     forecast_for_row,
     render_forecast_lines,
@@ -45,9 +46,11 @@ def render_report(
     limits: LimitConfig | None = None,
     prediction: PredictionConfig = PredictionConfig(),
     as_of: datetime | None = None,
+    *,
+    catalog_models: Iterable[str] | None = None,
 ) -> str:
     group_by = canonical_group_by(group_by)
-    rows = make_report_rows(dataset, group_by=group_by, top=top)
+    rows = make_report_rows(dataset, group_by=group_by, top=top, catalog_models=catalog_models)
     forecast = (
         make_usage_forecast(dataset, limits, prediction=prediction, as_of=as_of)
         if limits and limits.has_limits
@@ -234,10 +237,6 @@ def render_graph(
         use_theme = bool(theme and theme.enabled and color_enabled)
         lines = [f"{group_by} token usage"]
         for row in rows:
-            if max_total <= 0:
-                filled = 0
-            else:
-                filled = max(1, round((row.tokens.total_tokens / max_total) * bar_width))
             label = row.key
             if len(label) > label_width:
                 label = label[: label_width - 1] + "~"
@@ -251,7 +250,7 @@ def render_graph(
                     f"miss {format_int(row.tokens.cache_miss_input_tokens)}"
                 )
             else:
-                bar = "#" * filled
+                bar = plain_bar(row.tokens.total_tokens, max_total, bar_width, empty_char=" ")
                 lines.append(
                     f"{label:<{label_width}} | {bar:<{bar_width}} "
                     f"total {format_int(row.tokens.total_tokens)}  "
