@@ -167,14 +167,14 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 The `Build Linux Binary` GitHub Actions workflow builds a `linux-x86_64` standalone executable with Python bundled by PyInstaller. The binary is built on a Debian bullseye glibc 2.31 baseline so it can run on older Linux distributions without requiring the runner's newer glibc 2.35. The installable artifact is named like:
 
 ```text
-codex-token-usage-2.0.0-linux-x86_64.tar.gz
+codex-token-usage-2.0.4-linux-x86_64.tar.gz
 ```
 
 Install from the extracted archive with:
 
 ```bash
-tar -xzf codex-token-usage-2.0.0-linux-x86_64.tar.gz
-cd codex-token-usage-2.0.0-linux-x86_64
+tar -xzf codex-token-usage-2.0.4-linux-x86_64.tar.gz
+cd codex-token-usage-2.0.4-linux-x86_64
 sudo ./install.sh
 ```
 
